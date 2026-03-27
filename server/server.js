@@ -8,16 +8,37 @@ const { Server } = require('socket.io');
 const app = express();
 const server = http.createServer(app);
 
+const allowedOrigins = [
+  'https://grab-menu-app.onrender.com',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:4173',
+  'http://127.0.0.1:4173',
+];
+
+const corsOptions = {
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
+  credentials: true,
+};
+
 // Enable CORS for frontend
-app.use(cors({ origin: '*' }));
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '5mb' }));
 
 // Set up Socket.io
 const io = new Server(server, {
   cors: {
-    origin: '*',
-    methods: ['GET', 'POST']
-  }
+    origin: allowedOrigins,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+    credentials: true,
+  },
 });
 
 app.set('io', io); // make io accessible in routes
