@@ -19,6 +19,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import { getApiUrl } from '../../config/api';
 
 const emptyForm = {
   name: '',
@@ -49,7 +50,7 @@ export default function SuperAdminDashboard() {
   const fetchRestaurants = async () => {
     try {
       setLoading(true);
-      const res = await fetch('http://localhost:5000/api/restaurants', {
+      const res = await fetch(getApiUrl('/api/restaurants'), {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
@@ -78,7 +79,7 @@ export default function SuperAdminDashboard() {
     setGeneratedCredentials(null);
 
     try {
-      const res = await fetch('http://localhost:5000/api/restaurants', {
+      const res = await fetch(getApiUrl('/api/restaurants'), {
         method: 'POST',
         headers: authHeaders,
         body: JSON.stringify(form),
@@ -105,8 +106,8 @@ export default function SuperAdminDashboard() {
     setSuccess('');
 
     const endpoint = payload.status
-      ? `http://localhost:5000/api/restaurants/${restaurantId}/status`
-      : `http://localhost:5000/api/restaurants/${restaurantId}/plan`;
+      ? getApiUrl(`/api/restaurants/${restaurantId}/status`)
+      : getApiUrl(`/api/restaurants/${restaurantId}/plan`);
 
     const res = await fetch(endpoint, {
       method: 'PATCH',

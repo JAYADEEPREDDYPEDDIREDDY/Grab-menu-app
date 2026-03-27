@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { CheckCircle2, Clock, Utensils, ArrowLeft, Loader2 } from 'lucide-react';
 import { io } from 'socket.io-client';
+import { SOCKET_BASE_URL, getApiUrl } from '../../config/api';
 
 export default function OrderTracking() {
   const { id } = useParams();
@@ -15,12 +16,12 @@ export default function OrderTracking() {
 
   useEffect(() => {
     // Connect to Socket
-    const socket = io('http://localhost:5000');
+    const socket = io(SOCKET_BASE_URL);
     
     // Initial fetch
     const fetchOrder = async () => {
       try {
-        const res = await fetch(`http://localhost:5000/api/orders/${id}`);
+        const res = await fetch(getApiUrl(`/api/orders/${id}`));
         if (!res.ok) throw new Error("Order not found");
         const data = await res.json();
         setOrder(data);

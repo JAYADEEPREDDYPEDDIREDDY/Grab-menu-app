@@ -14,6 +14,7 @@ import {
 } from '@mui/material';
 import ShieldRoundedIcon from '@mui/icons-material/ShieldRounded';
 import { adminTheme } from '../../theme/adminTheme';
+import { getApiUrl } from '../../config/api';
 
 export default function SuperAdminLogin() {
   const [username, setUsername] = useState('');
@@ -29,7 +30,7 @@ export default function SuperAdminLogin() {
     setLoading(true);
 
     try {
-      const res = await fetch('http://localhost:5000/api/admin/super/login', {
+      const res = await fetch(getApiUrl('/api/admin/super/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),

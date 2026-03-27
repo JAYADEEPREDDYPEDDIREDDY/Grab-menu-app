@@ -6,6 +6,7 @@ import CartDrawer from '../../components/CartDrawer';
 import SearchBar from '../../components/SearchBar';
 import CategoryFilter from '../../components/CategoryFilter';
 import CartButton from '../../components/CartButton';
+import { getApiUrl } from '../../config/api';
 
 const categoryLabels = {
   'main course': 'Main Course',
@@ -71,7 +72,7 @@ export default function Menu() {
 
     const resolveRestaurant = async () => {
       try {
-        const response = await fetch(`http://localhost:5000/api/tables/${tableId}`);
+        const response = await fetch(getApiUrl(`/api/tables/${tableId}`));
         const data = await response.json();
 
         if (!response.ok) {
@@ -103,7 +104,7 @@ export default function Menu() {
     const fetchMenu = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`http://localhost:5000/api/menu?restaurantId=${restaurantId}`);
+        const response = await fetch(getApiUrl(`/api/menu?restaurantId=${restaurantId}`));
         const data = await response.json().catch(() => []);
 
         if (!response.ok) {

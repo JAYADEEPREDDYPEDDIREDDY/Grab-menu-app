@@ -10,6 +10,7 @@ import {
   X,
 } from 'lucide-react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { getApiUrl } from '../config/api';
 
 function QuantityStepper({ quantity, onDecrease, onIncrease }) {
   return (
@@ -96,7 +97,7 @@ export default function CartDrawer({ isOpen, onClose, restaurantId }) {
 
     try {
       setIsSubmitting(true);
-      const response = await fetch('http://localhost:5000/api/orders', {
+      const response = await fetch(getApiUrl('/api/orders'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

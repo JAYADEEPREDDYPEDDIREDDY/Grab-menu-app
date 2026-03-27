@@ -17,6 +17,7 @@ import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded';
 import ImageSearchRoundedIcon from '@mui/icons-material/ImageSearchRounded';
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
 import SaveRoundedIcon from '@mui/icons-material/SaveRounded';
+import { getApiUrl } from '../../config/api';
 
 const exampleText = `Chicken 65 | 15 | Starter | Crispy fried chicken
 Butter Chicken | 18 | Main Course | Creamy tomato curry
@@ -146,7 +147,7 @@ export default function MenuImport() {
     setSuccess('');
 
     try {
-      const response = await fetch('http://localhost:5000/api/menu/import/preview', {
+      const response = await fetch(getApiUrl('/api/menu/import/preview'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -183,7 +184,7 @@ export default function MenuImport() {
     setSuccess('');
 
     try {
-      const response = await fetch('http://localhost:5000/api/menu/import/commit', {
+      const response = await fetch(getApiUrl('/api/menu/import/commit'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

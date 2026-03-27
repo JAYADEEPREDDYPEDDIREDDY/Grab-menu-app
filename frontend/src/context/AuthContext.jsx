@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
+import { getApiUrl } from '../config/api';
 
 const AuthContext = createContext();
 
@@ -87,7 +88,7 @@ export const AuthProvider = ({ children }) => {
     }
 
     try {
-      const response = await fetch('http://localhost:5000/api/restaurants/current', {
+      const response = await fetch(getApiUrl('/api/restaurants/current'), {
         headers: {
           Authorization: `Bearer ${token}`,
         },

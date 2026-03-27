@@ -13,6 +13,7 @@ import InsightsRoundedIcon from '@mui/icons-material/InsightsRounded';
 import LocalFireDepartmentRoundedIcon from '@mui/icons-material/LocalFireDepartmentRounded';
 import TableRestaurantRoundedIcon from '@mui/icons-material/TableRestaurantRounded';
 import DonutLargeRoundedIcon from '@mui/icons-material/DonutLargeRounded';
+import { getApiUrl } from '../../config/api';
 
 const normalizeOrders = (incomingOrders) =>
   incomingOrders.filter(
@@ -49,7 +50,7 @@ export default function Analytics() {
   useEffect(() => {
     const fetchOrders = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/orders', {
+        const res = await fetch(getApiUrl('/api/orders'), {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {

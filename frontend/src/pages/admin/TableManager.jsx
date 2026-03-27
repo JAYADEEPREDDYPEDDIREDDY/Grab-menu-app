@@ -15,6 +15,7 @@ import {
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded';
 import PrintRoundedIcon from '@mui/icons-material/PrintRounded';
+import { getApiUrl } from '../../config/api';
 
 export default function TableManager() {
   const { token, user } = useAuth();
@@ -28,7 +29,7 @@ export default function TableManager() {
   const fetchTables = async () => {
     try {
       setError('');
-      const res = await fetch(`http://localhost:5000/api/tables?domainUrl=${encodeURIComponent(window.location.origin)}`, {
+      const res = await fetch(getApiUrl(`/api/tables?domainUrl=${encodeURIComponent(window.location.origin)}`), {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
@@ -63,7 +64,7 @@ export default function TableManager() {
       setIsSubmitting(true);
       setError('');
       setSuccess('');
-      const res = await fetch('http://localhost:5000/api/tables', {
+      const res = await fetch(getApiUrl('/api/tables'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -96,7 +97,7 @@ export default function TableManager() {
     try {
       setError('');
       setSuccess('');
-      const res = await fetch(`http://localhost:5000/api/tables/${id}`, {
+      const res = await fetch(getApiUrl(`/api/tables/${id}`), {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });

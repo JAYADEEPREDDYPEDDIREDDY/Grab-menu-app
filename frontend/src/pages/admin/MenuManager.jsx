@@ -20,6 +20,7 @@ import {
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded';
+import { getApiUrl } from '../../config/api';
 
 const emptyForm = {
   name: '',
@@ -42,7 +43,7 @@ export default function MenuManager() {
   const fetchItems = async () => {
     try {
       const query = user?.restaurantId ? `?restaurantId=${user.restaurantId}` : '';
-      const res = await fetch(`http://localhost:5000/api/menu${query}`, {
+      const res = await fetch(getApiUrl(`/api/menu${query}`), {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
@@ -65,8 +66,8 @@ export default function MenuManager() {
     try {
       const method = editId ? 'PUT' : 'POST';
       const url = editId
-        ? `http://localhost:5000/api/menu/${editId}`
-        : 'http://localhost:5000/api/menu';
+        ? getApiUrl(`/api/menu/${editId}`)
+        : getApiUrl('/api/menu');
 
       await fetch(url, {
         method,
@@ -98,7 +99,7 @@ export default function MenuManager() {
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this menu item?')) return;
     try {
-      await fetch(`http://localhost:5000/api/menu/${id}`, {
+      await fetch(getApiUrl(`/api/menu/${id}`), {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });

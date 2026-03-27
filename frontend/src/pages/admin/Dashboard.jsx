@@ -24,6 +24,7 @@ import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import LunchDiningRoundedIcon from '@mui/icons-material/LunchDiningRounded';
 import PointOfSaleRoundedIcon from '@mui/icons-material/PointOfSaleRounded';
 import CircleRoundedIcon from '@mui/icons-material/CircleRounded';
+import { SOCKET_BASE_URL, getApiUrl } from '../../config/api';
 
 const columns = [
   { key: 'Pending', title: 'New / Pending', color: '#FBBF24' },
@@ -292,7 +293,7 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchOrders = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/orders', {
+        const res = await fetch(getApiUrl('/api/orders'), {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {
@@ -308,7 +309,7 @@ export default function Dashboard() {
     fetchOrders();
     refreshRestaurant();
 
-    const socket = io('http://localhost:5000');
+    const socket = io(SOCKET_BASE_URL);
 
     socket.on('newOrder', (order) => {
       if (String(order.restaurantId) !== String(restaurantId)) {
@@ -345,7 +346,7 @@ export default function Dashboard() {
     );
 
     try {
-      await fetch(`http://localhost:5000/api/orders/${orderId}/status`, {
+      await fetch(getApiUrl(`/api/orders/${orderId}/status`), {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

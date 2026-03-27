@@ -5,6 +5,7 @@ import PaletteRoundedIcon from '@mui/icons-material/PaletteRounded';
 import UploadRoundedIcon from '@mui/icons-material/UploadRounded';
 import { alpha } from '@mui/material/styles';
 import { themeOptions } from '../../theme/adminTheme';
+import { getApiUrl } from '../../config/api';
 
 const emptyForm = {
   name: '',
@@ -59,7 +60,7 @@ export default function RestaurantSettings() {
     setSuccess('');
 
     try {
-      const response = await fetch('http://localhost:5000/api/restaurants/current/profile', {
+      const response = await fetch(getApiUrl('/api/restaurants/current/profile'), {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
