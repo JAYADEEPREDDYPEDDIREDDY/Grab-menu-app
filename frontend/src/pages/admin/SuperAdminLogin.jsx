@@ -12,10 +12,10 @@ import {
   ThemeProvider,
   Typography,
 } from '@mui/material';
-import StorefrontRoundedIcon from '@mui/icons-material/StorefrontRounded';
+import ShieldRoundedIcon from '@mui/icons-material/ShieldRounded';
 import { adminTheme } from '../../theme/adminTheme';
 
-export default function AdminLogin() {
+export default function SuperAdminLogin() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -29,18 +29,19 @@ export default function AdminLogin() {
     setLoading(true);
 
     try {
-      const res = await fetch('http://localhost:5000/api/admin/login', {
+      const res = await fetch('http://localhost:5000/api/admin/super/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
       });
 
       const data = await res.json();
-
-      if (!res.ok) throw new Error(data.message || 'Login failed');
+      if (!res.ok) {
+        throw new Error(data.message || 'Login failed');
+      }
 
       login(data);
-      navigate('/admin');
+      navigate('/super-admin');
     } catch (loginError) {
       setError(loginError.message);
     } finally {
@@ -64,7 +65,7 @@ export default function AdminLogin() {
         <Card
           sx={{
             width: '100%',
-            maxWidth: 460,
+            maxWidth: 480,
             backgroundColor: '#1A1715',
             borderRadius: '24px',
             p: 4,
@@ -82,12 +83,12 @@ export default function AdminLogin() {
                   background: 'linear-gradient(180deg, #FF9E45 0%, #FF8C2B 100%)',
                 }}
               >
-                <StorefrontRoundedIcon sx={{ color: '#111111', fontSize: 30 }} />
+                <ShieldRoundedIcon sx={{ color: '#111111', fontSize: 30 }} />
               </Box>
               <Box>
-                <Typography variant="h4">Lumina Admin Panel</Typography>
+                <Typography variant="h4">Lumina Super Admin</Typography>
                 <Typography color="text.secondary" sx={{ mt: 1 }}>
-                  Sign in to manage your restaurant in real time.
+                  Manage restaurants, plans, and platform access.
                 </Typography>
               </Box>
             </Stack>
@@ -116,7 +117,7 @@ export default function AdminLogin() {
             </Box>
 
             <Typography align="center" sx={{ color: 'text.secondary', fontSize: 13 }}>
-              Demo credentials: admin / admin123
+              Demo credentials: superadmin / superadmin123
             </Typography>
           </Stack>
         </Card>

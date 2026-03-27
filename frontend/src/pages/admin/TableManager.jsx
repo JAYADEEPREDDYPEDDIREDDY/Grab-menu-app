@@ -17,7 +17,7 @@ import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded';
 import PrintRoundedIcon from '@mui/icons-material/PrintRounded';
 
 export default function TableManager() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [tables, setTables] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newTableNum, setNewTableNum] = useState('');
@@ -28,7 +28,7 @@ export default function TableManager() {
   const fetchTables = async () => {
     try {
       setError('');
-      const res = await fetch('http://localhost:5000/api/tables', {
+      const res = await fetch(`http://localhost:5000/api/tables?domainUrl=${encodeURIComponent(window.location.origin)}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
@@ -47,6 +47,9 @@ export default function TableManager() {
   useEffect(() => {
     fetchTables();
   }, [token]);
+
+  const getTableQrLink = (table) =>
+    `${window.location.origin}/menu?table=${table.tableNumber}&restaurant=${user?.restaurantId || table.restaurantId}`;
 
   const handleAddTable = async (event) => {
     event.preventDefault();
@@ -114,15 +117,17 @@ export default function TableManager() {
     }
   };
 
-  const printQR = (tableNum) => {
-    const printContent = document.getElementById(`qr-table-${tableNum}`).innerHTML;
+  const printQR = (table) => {
+    const printContent = document.getElementById(`qr-table-${table.tableNumber}`).innerHTML;
+    const qrLink = getTableQrLink(table);
     const printWindow = window.open('', '', 'width=600,height=600');
     printWindow.document.write(`
-      <html><head><title>Print QR - Table ${tableNum}</title></head>
+      <html><head><title>Print QR - Table ${table.tableNumber}</title></head>
       <body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:Inter,Segoe UI,sans-serif;">
-        <h2>Table ${tableNum}</h2>
+        <h2>Table ${table.tableNumber}</h2>
         <div style="margin:20px;padding:20px;border:2px solid #000;display:inline-block;">${printContent}</div>
         <p>Scan to view menu and order</p>
+        <p style="max-width:460px;word-break:break-all;text-align:center;">${qrLink}</p>
         <script>window.print(); window.close();</script>
       </body></html>
     `);
@@ -233,6 +238,9 @@ export default function TableManager() {
 
               <Stack spacing={2.5} alignItems="center" textAlign="center">
                 <Typography variant="h6">Table {table.tableNumber}</Typography>
+                <Typography sx={{ color: 'text.secondary', fontSize: 13 }}>
+                  QR now points to this restaurant's menu directly.
+                </Typography>
 
                 <Box
                   id={`qr-table-${table.tableNumber}`}
@@ -253,14 +261,14 @@ export default function TableManager() {
                     wordBreak: 'break-all',
                   }}
                 >
-                  {table.qrCodeData}
+                  {getTableQrLink(table)}
                 </Typography>
 
                 <Button
                   fullWidth
                   variant="outlined"
                   startIcon={<PrintRoundedIcon />}
-                  onClick={() => printQR(table.tableNumber)}
+                  onClick={() => printQR(table)}
                 >
                   Print QR
                 </Button>

@@ -1,25 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { io } from 'socket.io-client';
 import {
-  closestCenter,
   DndContext,
   PointerSensor,
+  pointerWithin,
   useDroppable,
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
-import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import {
-  Box,
-  Button,
-  Card,
-  Chip,
-  CircularProgress,
-  Stack,
-  Typography,
-} from '@mui/material';
+  arrayMove,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { Box, Button, Card, Chip, CircularProgress, Stack, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import DragIndicatorRoundedIcon from '@mui/icons-material/DragIndicatorRounded';
 import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded';
@@ -70,6 +67,17 @@ const actionConfig = {
   },
 };
 
+const normalizeOrders = (incomingOrders) =>
+  incomingOrders.filter(
+    (order) =>
+      order &&
+      order._id &&
+      order.tableId &&
+      Array.isArray(order.items) &&
+      order.items.length > 0 &&
+      order.items.every((item) => item.menuItemId)
+  );
+
 function formatOrderId(order) {
   const value = order._id?.slice(-4) || '0';
   return `#${value.padStart(4, '0')}`;
@@ -105,7 +113,6 @@ function SortableOrderCard({ order, onAdvance }) {
           ? '0 28px 60px rgba(0,0,0,0.36)'
           : '0 8px 24px rgba(0,0,0,0.18)',
         '&:hover': {
-          transform: `${CSS.Transform.toString(transform) || 'translate3d(0,0,0)'} scale(1.015)`,
           boxShadow: '0 20px 38px rgba(0,0,0,0.26)',
         },
       }}
@@ -121,6 +128,7 @@ function SortableOrderCard({ order, onAdvance }) {
                 cursor: 'grab',
                 display: 'grid',
                 placeItems: 'center',
+                touchAction: 'none',
               }}
             >
               <DragIndicatorRoundedIcon />
@@ -148,17 +156,6 @@ function SortableOrderCard({ order, onAdvance }) {
                     fontWeight: 700,
                   }}
                 />
-                {order.mergedTables?.length ? (
-                  <Chip
-                    label={`Merged ${order.mergedTables.length + 1}`}
-                    size="small"
-                    sx={{
-                      backgroundColor: 'rgba(255,255,255,0.06)',
-                      color: 'text.secondary',
-                      height: 28,
-                    }}
-                  />
-                ) : null}
               </Stack>
               <Stack direction="row" spacing={0.75} alignItems="center" color="text.secondary">
                 <AccessTimeRoundedIcon sx={{ fontSize: 18 }} />
@@ -253,7 +250,10 @@ function KanbanColumn({ column, orders, badge, onAdvance }) {
           </Stack>
         </Stack>
 
-        <SortableContext items={orders.map((order) => order._id)} strategy={verticalListSortingStrategy}>
+        <SortableContext
+          items={orders.map((order) => order._id)}
+          strategy={verticalListSortingStrategy}
+        >
           <Stack spacing={2.25}>
             {orders.length ? (
               orders.map((order) => (
@@ -272,7 +272,7 @@ function KanbanColumn({ column, orders, badge, onAdvance }) {
                   px: 3,
                 }}
               >
-                Drop orders here as their status changes.
+                No live orders for this restaurant yet.
               </Box>
             )}
           </Stack>
@@ -283,10 +283,11 @@ function KanbanColumn({ column, orders, badge, onAdvance }) {
 }
 
 export default function Dashboard() {
-  const { token } = useAuth();
+  const { token, restaurant, user, refreshRestaurant } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const restaurantId = user?.restaurantId;
 
   useEffect(() => {
     const fetchOrders = async () => {
@@ -295,7 +296,7 @@ export default function Dashboard() {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {
-          setOrders(await res.json());
+          setOrders(normalizeOrders(await res.json()));
         }
       } catch (error) {
         console.error(error);
@@ -305,21 +306,34 @@ export default function Dashboard() {
     };
 
     fetchOrders();
+    refreshRestaurant();
 
     const socket = io('http://localhost:5000');
 
     socket.on('newOrder', (order) => {
-      setOrders((current) => [{ ...order }, ...current.filter((item) => item._id !== order._id)]);
+      if (String(order.restaurantId) !== String(restaurantId)) {
+        return;
+      }
+
+      setOrders((current) =>
+        normalizeOrders([{ ...order }, ...current.filter((item) => item._id !== order._id)])
+      );
     });
 
     socket.on('orderStatusUpdate', (updatedOrder) => {
+      if (String(updatedOrder.restaurantId) !== String(restaurantId)) {
+        return;
+      }
+
       setOrders((current) =>
-        current.map((order) => (order._id === updatedOrder._id ? updatedOrder : order))
+        normalizeOrders(
+          current.map((order) => (order._id === updatedOrder._id ? updatedOrder : order))
+        )
       );
     });
 
     return () => socket.disconnect();
-  }, [token]);
+  }, [restaurantId, token]);
 
   const updateOrderStatus = async (orderId, nextStatus) => {
     if (!nextStatus) return;
@@ -341,6 +355,7 @@ export default function Dashboard() {
       });
     } catch (error) {
       console.error(error);
+      window.location.reload();
     }
   };
 
@@ -392,6 +407,19 @@ export default function Dashboard() {
     updateOrderStatus(active.id, nextStatus);
   };
 
+  const liveOrderCount = orders.filter((order) => order.status !== 'Completed').length;
+  const totalRevenueToday = orders.reduce((sum, order) => sum + Number(order.totalPrice || 0), 0);
+  const completedCount = orders.filter((order) => order.status === 'Completed').length;
+
+  const summaryCards = useMemo(
+    () => [
+      { label: 'Live Orders', value: liveOrderCount },
+      { label: 'Completed Today', value: completedCount },
+      { label: 'Revenue', value: `$${totalRevenueToday.toFixed(2)}` },
+    ],
+    [completedCount, liveOrderCount, totalRevenueToday]
+  );
+
   if (loading) {
     return (
       <Box sx={{ minHeight: '60vh', display: 'grid', placeItems: 'center' }}>
@@ -405,36 +433,55 @@ export default function Dashboard() {
 
   return (
     <Stack spacing={4}>
-      <Stack
-        direction={{ xs: 'column', md: 'row' }}
-        justifyContent="space-between"
-        alignItems={{ xs: 'flex-start', md: 'center' }}
-        spacing={2}
-      >
-        <Box>
-          <Typography variant="h3" sx={{ mb: 1 }}>
-            Live Orders
-          </Typography>
-          <Typography variant="subtitle1">
-            Drag orders across columns to update their status
-          </Typography>
-        </Box>
+      <Card sx={{ p: 3.5, borderRadius: '24px', backgroundColor: '#1A1715' }}>
+        <Stack
+          direction={{ xs: 'column', xl: 'row' }}
+          spacing={3}
+          justifyContent="space-between"
+          alignItems={{ xs: 'flex-start', xl: 'center' }}
+        >
+          <Box>
+            <Typography variant="h3" sx={{ mb: 1 }}>
+              {restaurant?.name || 'Restaurant'} Live Orders
+            </Typography>
+            <Typography variant="subtitle1">
+              Only real customer orders from this restaurant and table flow into this board.
+            </Typography>
+          </Box>
 
-        <Chip
-          icon={<CircleRoundedIcon sx={{ color: '#22C55E !important', fontSize: 14 }} />}
-          label="Receiving live updates"
+          <Chip
+            icon={<CircleRoundedIcon sx={{ color: '#22C55E !important', fontSize: 14 }} />}
+            label="Receiving live updates"
+            sx={{
+              height: 46,
+              px: 1.25,
+              borderRadius: '999px',
+              backgroundColor: 'rgba(255,255,255,0.04)',
+              color: '#FFFFFF',
+              '& .MuiChip-label': { fontWeight: 700, px: 0.75 },
+            }}
+          />
+        </Stack>
+
+        <Box
           sx={{
-            height: 46,
-            px: 1.25,
-            borderRadius: '999px',
-            backgroundColor: 'rgba(255,255,255,0.04)',
-            color: '#FFFFFF',
-            '& .MuiChip-label': { fontWeight: 700, px: 0.75 },
+            mt: 3,
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' },
+            gap: 2,
           }}
-        />
-      </Stack>
-
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        >
+          {summaryCards.map((card) => (
+            <Card key={card.label} sx={{ p: 2.25, borderRadius: '18px', backgroundColor: '#221F1C' }}>
+              <Typography color="text.secondary" sx={{ mb: 0.75 }}>
+                {card.label}
+              </Typography>
+              <Typography variant="h5">{card.value}</Typography>
+            </Card>
+          ))}
+        </Box>
+      </Card>
+      <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragEnd={handleDragEnd}>
         <Box
           sx={{
             display: 'grid',

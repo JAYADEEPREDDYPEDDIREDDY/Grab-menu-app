@@ -32,7 +32,7 @@ const emptyForm = {
 };
 
 export default function MenuManager() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -41,8 +41,14 @@ export default function MenuManager() {
 
   const fetchItems = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/menu');
-      if (res.ok) setItems(await res.json());
+      const query = user?.restaurantId ? `?restaurantId=${user.restaurantId}` : '';
+      const res = await fetch(`http://localhost:5000/api/menu${query}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setItems(data);
+      }
     } catch (error) {
       console.error(error);
     } finally {
@@ -52,7 +58,7 @@ export default function MenuManager() {
 
   useEffect(() => {
     fetchItems();
-  }, []);
+  }, [token, user?.restaurantId]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();

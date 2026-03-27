@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useCart } from '../../context/CartContext';
 import MenuItemCard from '../../components/MenuItemCard';
@@ -6,51 +6,6 @@ import CartDrawer from '../../components/CartDrawer';
 import SearchBar from '../../components/SearchBar';
 import CategoryFilter from '../../components/CategoryFilter';
 import CartButton from '../../components/CartButton';
-
-const fallbackMenu = [
-  {
-    _id: 'fallback-1',
-    name: 'Chicken 65',
-    price: 15,
-    description: 'Crisp fried chicken tossed with curry leaf, chili, and citrus.',
-    category: 'starter',
-    prepTime: '15 min',
-    isPopular: true,
-  },
-  {
-    _id: 'fallback-2',
-    name: 'Truffle Fries',
-    price: 9,
-    description: 'Golden fries with parmesan, herbs, and white truffle oil.',
-    category: 'starter',
-    prepTime: '8 min',
-  },
-  {
-    _id: 'fallback-3',
-    name: 'Butter Chicken Bowl',
-    price: 18,
-    description: 'Creamy tomato butter chicken served over saffron rice.',
-    category: 'main course',
-    prepTime: '18 min',
-    isPopular: true,
-  },
-  {
-    _id: 'fallback-4',
-    name: 'Mushroom Risotto',
-    price: 17,
-    description: 'Slow-cooked arborio rice with wild mushrooms and parmesan.',
-    category: 'main course',
-    prepTime: '20 min',
-  },
-  {
-    _id: 'fallback-5',
-    name: 'Smoked Lemon Soda',
-    price: 5,
-    description: 'Citrus-forward refresher with a light smoky finish.',
-    category: 'drinks',
-    prepTime: '4 min',
-  },
-];
 
 const categoryLabels = {
   'main course': 'Main Course',
@@ -75,59 +30,112 @@ const formatCategoryLabel = (category) => {
   );
 };
 
-const buildDisplayMenu = (sourceItems) => {
-  const normalizedSource = sourceItems.map((item, index) => ({
+const normalizeMenu = (sourceItems) =>
+  sourceItems.map((item, index) => ({
     ...item,
     prepTime: item.prepTime || `${8 + (index % 4) * 4} min`,
     categoryLabel: formatCategoryLabel(item.category),
   }));
 
-  if (normalizedSource.length >= 6) {
-    return normalizedSource;
-  }
-
-  const existingNames = new Set(
-    normalizedSource.map((item) => item.name.trim().toLowerCase())
-  );
-
-  const paddedFallbacks = fallbackMenu
-    .filter((item) => !existingNames.has(item.name.trim().toLowerCase()))
-    .map((item, index) => ({
-      ...item,
-      prepTime: item.prepTime || `${8 + (index % 4) * 4} min`,
-      categoryLabel: formatCategoryLabel(item.category),
-    }));
-
-  return [...normalizedSource, ...paddedFallbacks];
-};
-
 export default function Menu() {
   const [searchParams] = useSearchParams();
   const tableId = searchParams.get('table');
+  const restaurantParam = searchParams.get('restaurant');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [restaurantId, setRestaurantId] = useState(restaurantParam || '');
+  const [restaurantError, setRestaurantError] = useState('');
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState('All Items');
   const [searchQuery, setSearchQuery] = useState('');
-  const { cartCount } = useCart();
+  const { cartCount, clearCart } = useCart();
+  const previousRestaurantRef = useRef('');
+  const parsedTableNumber = Number.parseInt(tableId || '', 10);
+  const hasValidTableNumber = Number.isInteger(parsedTableNumber) && parsedTableNumber > 0;
 
   useEffect(() => {
+    if (!tableId || !hasValidTableNumber) {
+      if (!tableId) {
+        return;
+      }
+
+      setRestaurantError('This QR code has an invalid table number. Please scan a valid table QR.');
+      setLoading(false);
+      return;
+    }
+
+    if (restaurantParam) {
+      setRestaurantId(restaurantParam);
+      return;
+    }
+
+    const resolveRestaurant = async () => {
+      try {
+        const response = await fetch(`http://localhost:5000/api/tables/${tableId}`);
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.message || 'Failed to load table');
+        }
+
+        if (!data.restaurantId) {
+          throw new Error('This QR code is not linked to a restaurant yet.');
+        }
+
+        setRestaurantId(data.restaurantId);
+      } catch (error) {
+        console.error(error);
+        setRestaurantError(error.message || 'Unable to resolve restaurant');
+      }
+    };
+
+    resolveRestaurant();
+  }, [hasValidTableNumber, restaurantParam, tableId]);
+
+  useEffect(() => {
+    if (!restaurantId) {
+      if (!restaurantError) {
+        setLoading(false);
+      }
+      return;
+    }
+
     const fetchMenu = async () => {
       try {
         setLoading(true);
-        const response = await fetch('http://localhost:5000/api/menu');
+        const response = await fetch(`http://localhost:5000/api/menu?restaurantId=${restaurantId}`);
         const data = await response.json().catch(() => []);
-        setItems(buildDisplayMenu(Array.isArray(data) && data.length ? data : fallbackMenu));
+
+        if (!response.ok) {
+          throw new Error(data.message || 'Failed to load menu');
+        }
+
+        setItems(normalizeMenu(Array.isArray(data) ? data : []));
       } catch (error) {
         console.error('Failed to load menu', error);
-        setItems(buildDisplayMenu(fallbackMenu));
+        setRestaurantError(error.message || 'Failed to load menu');
       } finally {
         setLoading(false);
       }
     };
 
     fetchMenu();
-  }, []);
+  }, [restaurantError, restaurantId]);
+
+  useEffect(() => {
+    if (!restaurantId) {
+      return;
+    }
+
+    if (
+      previousRestaurantRef.current &&
+      previousRestaurantRef.current !== restaurantId
+    ) {
+      clearCart();
+    }
+
+    previousRestaurantRef.current = restaurantId;
+  }, [clearCart, restaurantId]);
 
   const categories = useMemo(() => {
     const unique = Array.from(new Set(items.map((item) => item.categoryLabel).filter(Boolean)));
@@ -149,7 +157,7 @@ export default function Menu() {
     });
   }, [activeCategory, items, searchQuery]);
 
-  if (!tableId) {
+  if (!tableId || !hasValidTableNumber) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[linear-gradient(180deg,#1E1B18_0%,#12100E_100%)] px-4 text-center text-white">
         <div className="w-full max-w-lg rounded-[24px] border border-red-500/10 bg-[#1A1715]/90 p-8 shadow-[0_28px_60px_rgba(0,0,0,0.28)] backdrop-blur-xl">
@@ -157,6 +165,17 @@ export default function Menu() {
           <p className="text-[#A1A1AA]">
             Please scan the QR code on your table to open the menu and place an order.
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (restaurantError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[linear-gradient(180deg,#1E1B18_0%,#12100E_100%)] px-4 text-center text-white">
+        <div className="w-full max-w-lg rounded-[24px] border border-red-500/10 bg-[#1A1715]/90 p-8 shadow-[0_28px_60px_rgba(0,0,0,0.28)] backdrop-blur-xl">
+          <h2 className="mb-3 text-2xl font-bold text-red-300">Restaurant Not Available</h2>
+          <p className="text-[#A1A1AA]">{restaurantError}</p>
         </div>
       </div>
     );
@@ -173,7 +192,7 @@ export default function Menu() {
       </section>
 
       <div className="relative mx-auto flex w-full max-w-[1320px] flex-col items-center px-6 pt-12 md:px-12">
-        <main className="relative">
+        <main className="relative w-full">
           <div className="mb-[64px] flex w-full justify-center">
             <CategoryFilter
               categories={categories}
@@ -184,28 +203,38 @@ export default function Menu() {
 
           {loading ? (
             <div className="flex justify-center py-24">
-              <div className="h-11 w-11 rounded-full border-[4px] border-[#FF8C2B] border-t-transparent animate-spin" />
+              <div className="h-11 w-11 animate-spin rounded-full border-[4px] border-[#FF8C2B] border-t-transparent" />
             </div>
           ) : (
             <div key={activeCategory} className="animate-fade-in">
-              <div className="mx-auto grid grid-cols-1 justify-items-center gap-10 px-4 md:grid-cols-2 md:px-8 xl:grid-cols-3 xl:px-10">
-                {visibleItems.map((item, index) => (
-                  <MenuItemCard key={item._id} item={item} index={index} />
-                ))}
-              </div>
-
-              {visibleItems.length === 0 ? (
-                <div className="mt-10 rounded-[20px] border border-white/5 bg-[#1A1715] px-6 py-16 text-center text-[#A1A1AA] shadow-[0_18px_40px_rgba(0,0,0,0.2)]">
-                  <p className="text-lg font-semibold text-white">No items match your search.</p>
-                  <p className="mt-2">Try a different keyword or switch to another category.</p>
+              {visibleItems.length ? (
+                <div className="mx-auto grid grid-cols-1 justify-items-center gap-10 px-4 md:grid-cols-2 md:px-8 xl:grid-cols-3 xl:px-10">
+                  {visibleItems.map((item, index) => (
+                    <MenuItemCard key={item._id} item={item} index={index} />
+                  ))}
                 </div>
-              ) : null}
+              ) : (
+                <div className="mt-10 rounded-[20px] border border-white/5 bg-[#1A1715] px-6 py-16 text-center text-[#A1A1AA] shadow-[0_18px_40px_rgba(0,0,0,0.2)]">
+                  <p className="text-lg font-semibold text-white">
+                    {items.length ? 'No items match your search.' : 'This restaurant menu is empty.'}
+                  </p>
+                  <p className="mt-2">
+                    {items.length
+                      ? 'Try a different keyword or switch to another category.'
+                      : 'Ask the restaurant staff to add menu items for this location.'}
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </main>
       </div>
 
-      <CartDrawer isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
+      <CartDrawer
+        isOpen={isCartOpen}
+        onClose={() => setIsCartOpen(false)}
+        restaurantId={restaurantId}
+      />
       <CartButton count={cartCount} onClick={() => setIsCartOpen(true)} />
     </div>
   );

@@ -1,38 +1,42 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { useState } from 'react';
+import { useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import {
+  Avatar,
   Box,
+  Chip,
   CssBaseline,
   Divider,
   Drawer,
-  IconButton,
   Stack,
   ThemeProvider,
   Typography,
 } from '@mui/material';
 import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded';
+import InsightsRoundedIcon from '@mui/icons-material/InsightsRounded';
 import RestaurantMenuRoundedIcon from '@mui/icons-material/RestaurantMenuRounded';
-import CategoryRoundedIcon from '@mui/icons-material/CategoryRounded';
+import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded';
 import QrCode2RoundedIcon from '@mui/icons-material/QrCode2Rounded';
 import ReceiptLongRoundedIcon from '@mui/icons-material/ReceiptLongRounded';
-import DarkModeRoundedIcon from '@mui/icons-material/DarkModeRounded';
+import PaletteRoundedIcon from '@mui/icons-material/PaletteRounded';
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
 import StorefrontRoundedIcon from '@mui/icons-material/StorefrontRounded';
 import { alpha } from '@mui/material/styles';
-import { adminSurfaces, adminTheme } from '../theme/adminTheme';
+import { createAdminTheme, getAdminSurfaces, themeOptions } from '../theme/adminTheme';
 
 const drawerWidth = 240;
 
 const navItems = [
   { label: 'Live Orders', path: '/admin', icon: DashboardRoundedIcon },
+  { label: 'Analytics', path: '/admin/analytics', icon: InsightsRoundedIcon },
   { label: 'Menu Items', path: '/admin/menu', icon: RestaurantMenuRoundedIcon },
-  { label: 'Categories', path: '/admin/categories', icon: CategoryRoundedIcon },
+  { label: 'Import Menu', path: '/admin/menu/import', icon: UploadFileRoundedIcon },
   { label: 'Tables & QR', path: '/admin/tables', icon: QrCode2RoundedIcon },
   { label: 'Billing', path: '/admin/billing', icon: ReceiptLongRoundedIcon },
+  { label: 'Settings', path: '/admin/settings', icon: PaletteRoundedIcon },
 ];
 
-function SidebarLink({ active, icon: Icon, label, to }) {
+function SidebarLink({ active, icon: Icon, label, to, primaryColor }) {
   return (
     <Box
       component={NavLink}
@@ -47,13 +51,13 @@ function SidebarLink({ active, icon: Icon, label, to }) {
         textDecoration: 'none',
         color: active ? '#FFFFFF' : '#C9B9A6',
         background: active
-          ? 'linear-gradient(180deg, #FF9E45 0%, #FF8C2B 100%)'
+          ? `linear-gradient(180deg, ${alpha(primaryColor, 0.92)} 0%, ${primaryColor} 100%)`
           : 'transparent',
-        boxShadow: active ? '0 18px 35px rgba(255, 140, 43, 0.22)' : 'none',
+        boxShadow: active ? `0 18px 35px ${alpha(primaryColor, 0.22)}` : 'none',
         transition: 'all 180ms ease',
         '&:hover': {
           background: active
-            ? 'linear-gradient(180deg, #FFAA59 0%, #FF8C2B 100%)'
+            ? `linear-gradient(180deg, ${alpha(primaryColor, 0.88)} 0%, ${primaryColor} 100%)`
             : 'rgba(255,255,255,0.03)',
           transform: 'translateX(2px)',
         },
@@ -66,17 +70,27 @@ function SidebarLink({ active, icon: Icon, label, to }) {
 }
 
 export default function AdminLayout({ children }) {
-  const { logout } = useAuth();
+  const { logout, restaurant } = useAuth();
   const location = useLocation();
-  const [appearanceOn] = useState(true);
+  const themeKey = restaurant?.dashboardTheme || 'amber';
+  const surfaces = useMemo(() => getAdminSurfaces(themeKey), [themeKey]);
+  const theme = useMemo(() => createAdminTheme(themeKey), [themeKey]);
+  const activeTheme = themeOptions[themeKey] || themeOptions.amber;
+  const restaurantName = restaurant?.name || 'Restaurant Portal';
+  const initials = restaurantName
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'RP';
 
   return (
-    <ThemeProvider theme={adminTheme}>
+    <ThemeProvider theme={theme}>
       <CssBaseline />
       <Box
         sx={{
           minHeight: '100vh',
-          background: adminSurfaces.page,
+          background: surfaces.page,
           color: 'text.primary',
         }}
       >
@@ -93,36 +107,77 @@ export default function AdminLayout({ children }) {
         >
           <Stack sx={{ height: '100%' }}>
             <Box sx={{ p: 3.5 }}>
-              <Stack direction="row" spacing={1.75} alignItems="center">
-                <Box
+              <Stack spacing={1.75}>
+                <Stack direction="row" spacing={1.75} alignItems="center">
+                  {restaurant?.logoUrl ? (
+                    <Avatar
+                      src={restaurant.logoUrl}
+                      alt={restaurantName}
+                      variant="rounded"
+                      sx={{
+                        width: 52,
+                        height: 52,
+                        borderRadius: '16px',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        backgroundColor: '#221F1C',
+                      }}
+                    />
+                  ) : (
+                    <Box
+                      sx={{
+                        width: 52,
+                        height: 52,
+                        borderRadius: '16px',
+                        display: 'grid',
+                        placeItems: 'center',
+                        background: `linear-gradient(180deg, ${alpha(activeTheme.primary, 0.95)} 0%, ${alpha(activeTheme.primary, 0.72)} 100%)`,
+                        boxShadow: `0 16px 34px ${alpha(activeTheme.primary, 0.22)}`,
+                      }}
+                    >
+                      <Typography sx={{ color: '#111111', fontWeight: 800, fontSize: 18 }}>
+                        {initials}
+                      </Typography>
+                    </Box>
+                  )}
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography
+                      sx={{
+                        fontSize: 18,
+                        fontWeight: 700,
+                        lineHeight: 1.1,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {restaurantName}
+                    </Typography>
+                    <Typography
+                      sx={{
+                        fontSize: 12,
+                        letterSpacing: '0.16em',
+                        textTransform: 'uppercase',
+                        color: activeTheme.accent,
+                      }}
+                    >
+                      Restaurant Admin
+                    </Typography>
+                  </Box>
+                </Stack>
+
+                <Chip
+                  size="small"
+                  icon={<StorefrontRoundedIcon sx={{ color: `${activeTheme.primary} !important` }} />}
+                  label={restaurant?.subscriptionPlan ? `${restaurant.subscriptionPlan} plan` : 'Operations dashboard'}
                   sx={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: '16px',
-                    display: 'grid',
-                    placeItems: 'center',
-                    background:
-                      'linear-gradient(180deg, rgba(255,140,43,0.95) 0%, rgba(255,140,43,0.72) 100%)',
-                    boxShadow: `0 16px 34px ${alpha('#FF8C2B', 0.22)}`,
+                    alignSelf: 'flex-start',
+                    backgroundColor: alpha(activeTheme.primary, 0.12),
+                    color: '#F9F5EF',
+                    '& .MuiChip-label': {
+                      px: 1.2,
+                    },
                   }}
-                >
-                  <StorefrontRoundedIcon sx={{ color: '#111111', fontSize: 24 }} />
-                </Box>
-                <Box>
-                  <Typography sx={{ fontSize: 18, fontWeight: 700, lineHeight: 1.1 }}>
-                    Lumina
-                  </Typography>
-                  <Typography
-                    sx={{
-                      fontSize: 12,
-                      letterSpacing: '0.16em',
-                      textTransform: 'uppercase',
-                      color: '#D3B38C',
-                    }}
-                  >
-                    Admin Panel
-                  </Typography>
-                </Box>
+                />
               </Stack>
             </Box>
 
@@ -136,6 +191,7 @@ export default function AdminLayout({ children }) {
                   icon={icon}
                   label={label}
                   active={location.pathname === path}
+                  primaryColor={activeTheme.primary}
                 />
               ))}
             </Stack>
@@ -149,21 +205,25 @@ export default function AdminLayout({ children }) {
                 sx={{ px: 3.5, py: 3 }}
               >
                 <Box>
-                  <Typography sx={{ fontSize: 14, fontWeight: 600 }}>Appearance</Typography>
+                  <Typography sx={{ fontSize: 14, fontWeight: 600 }}>Current Theme</Typography>
                   <Typography sx={{ color: 'text.secondary', fontSize: 12 }}>
-                    {appearanceOn ? 'Dark premium mode' : 'Muted mode'}
+                    {activeTheme.label}
                   </Typography>
                 </Box>
-                <IconButton
+                <Box
                   sx={{
                     width: 40,
                     height: 40,
+                    borderRadius: '14px',
                     border: '1px solid rgba(255,255,255,0.08)',
-                    color: '#F2E8D8',
+                    backgroundColor: alpha(activeTheme.primary, 0.14),
+                    color: activeTheme.primary,
+                    display: 'grid',
+                    placeItems: 'center',
                   }}
                 >
-                  <DarkModeRoundedIcon />
-                </IconButton>
+                  <PaletteRoundedIcon fontSize="small" />
+                </Box>
               </Stack>
               <Box sx={{ px: 2.5, pb: 3 }}>
                 <Box
@@ -209,8 +269,7 @@ export default function AdminLayout({ children }) {
               position: 'fixed',
               inset: 0,
               pointerEvents: 'none',
-              background:
-                'radial-gradient(circle at 88% 8%, rgba(255,140,43,0.10), transparent 18%)',
+              background: surfaces.shellAccent,
             }}
           />
           <Box sx={{ position: 'relative', zIndex: 1 }}>{children}</Box>

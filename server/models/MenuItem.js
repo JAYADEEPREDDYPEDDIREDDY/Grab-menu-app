@@ -1,6 +1,12 @@
 const mongoose = require('mongoose');
 
 const menuItemSchema = new mongoose.Schema({
+  restaurantId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Restaurant',
+    default: null,
+    index: true,
+  },
   name: {
     type: String,
     required: true,

@@ -10,7 +10,7 @@ const server = http.createServer(app);
 
 // Enable CORS for frontend
 app.use(cors({ origin: '*' }));
-app.use(express.json());
+app.use(express.json({ limit: '5mb' }));
 
 // Set up Socket.io
 const io = new Server(server, {
@@ -38,6 +38,7 @@ io.on('connection', (socket) => {
 
 // Setup Mount Routes
 app.use('/api/admin', require('./routes/admin.routes'));
+app.use('/api/restaurants', require('./routes/restaurant.routes'));
 app.use('/api/menu', require('./routes/menu.routes'));
 app.use('/api/orders', require('./routes/order.routes'));
 app.use('/api/tables', require('./routes/table.routes'));

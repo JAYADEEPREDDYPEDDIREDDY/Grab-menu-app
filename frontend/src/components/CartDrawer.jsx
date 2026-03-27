@@ -75,7 +75,7 @@ function CartItem({ item, onDecrease, onIncrease, onRemove }) {
   );
 }
 
-export default function CartDrawer({ isOpen, onClose }) {
+export default function CartDrawer({ isOpen, onClose, restaurantId }) {
   const { cart, cartTotal, updateQuantity, removeFromCart, clearCart } = useCart();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -88,6 +88,10 @@ export default function CartDrawer({ isOpen, onClose }) {
       alert('Table ID missing! Cannot place order.');
       return;
     }
+    if (!restaurantId) {
+      alert('Restaurant is missing for this QR code.');
+      return;
+    }
     if (cart.length === 0) return;
 
     try {
@@ -97,11 +101,10 @@ export default function CartDrawer({ isOpen, onClose }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tableId,
+          restaurantId,
           customerName,
           items: cart.map((item) => ({
-            menuItemId: item._id.match(/^[0-9a-fA-F]{24}$/)
-              ? item._id
-              : '651a2b3c4d5e6f7a8b9c0d11',
+            menuItemId: item._id,
             quantity: item.quantity,
             priceAtTimeOfOrder: item.price,
           })),
