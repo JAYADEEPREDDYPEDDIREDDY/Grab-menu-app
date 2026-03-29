@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { io } from 'socket.io-client';
 import {
@@ -305,6 +305,7 @@ function KanbanColumn({ column, orders, badge, onAdvance }) {
 export default function Dashboard() {
   const { token, restaurant, user, refreshRestaurant } = useAuth();
   const [orders, setOrders] = useState([]);
+  const [activeBills, setActiveBills] = useState([]);
   const [sessionOverview, setSessionOverview] = useState({
     counts: { active: 0, locked: 0, billing: 0 },
     sessions: [],
@@ -313,6 +314,7 @@ export default function Dashboard() {
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [incomingAlert, setIncomingAlert] = useState(null);
   const [releasingSessionId, setReleasingSessionId] = useState('');
+  const [processingPaymentBillId, setProcessingPaymentBillId] = useState('');
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const restaurantId = user?.restaurantId;
   const knownOrderIdsRef = useRef(new Set());
@@ -362,11 +364,9 @@ export default function Dashboard() {
     });
   };
 
-  useEffect(() => {
-    let isMounted = true;
-
-    const fetchOrders = async (showLoader = false) => {
-      if (showLoader && isMounted) {
+  const fetchOrders = useCallback(
+    async (showLoader = false) => {
+      if (showLoader) {
         setLoading(true);
       }
 
@@ -375,44 +375,65 @@ export default function Dashboard() {
           headers: { Authorization: `Bearer ${token}` },
         });
 
-        if (res.ok && isMounted) {
-          const normalized = normalizeOrders(await res.json());
-          setOrders(normalized);
-          knownOrderIdsRef.current = new Set(normalized.map((order) => order._id));
-        }
-      } catch (error) {
-        console.error(error);
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    const fetchSessionOverview = async () => {
-      try {
-        const res = await fetch(getApiUrl('/api/session/overview'), {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
         if (!res.ok) {
           return;
         }
 
-        const data = await res.json();
-        if (isMounted) {
-          setSessionOverview({
-            counts: data.counts || { active: 0, locked: 0, billing: 0 },
-            sessions: Array.isArray(data.sessions) ? data.sessions : [],
-          });
-        }
+        const normalized = normalizeOrders(await res.json());
+        setOrders(normalized);
+        knownOrderIdsRef.current = new Set(normalized.map((order) => order._id));
       } catch (error) {
         console.error(error);
+      } finally {
+        setLoading(false);
       }
-    };
+    },
+    [token]
+  );
+
+  const fetchSessionOverview = useCallback(async () => {
+    try {
+      const res = await fetch(getApiUrl('/api/session/overview'), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) {
+        return;
+      }
+
+      const data = await res.json();
+      setSessionOverview({
+        counts: data.counts || { active: 0, locked: 0, billing: 0 },
+        sessions: Array.isArray(data.sessions) ? data.sessions : [],
+      });
+    } catch (error) {
+      console.error(error);
+    }
+  }, [token]);
+
+  const fetchBillingOverview = useCallback(async () => {
+    try {
+      const res = await fetch(getApiUrl('/api/billing/overview'), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) {
+        return;
+      }
+
+      const data = await res.json();
+      setActiveBills(Array.isArray(data.activeBills) ? data.activeBills : []);
+    } catch (error) {
+      console.error(error);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    let isMounted = true;
 
     fetchOrders();
     fetchSessionOverview();
+    fetchBillingOverview();
     refreshRestaurant();
 
     if (
@@ -434,6 +455,7 @@ export default function Dashboard() {
     socket.on('connect', () => {
       fetchOrders();
       fetchSessionOverview();
+      fetchBillingOverview();
     });
 
     socket.on('newOrder', (order) => {
@@ -466,10 +488,12 @@ export default function Dashboard() {
         )
       );
       fetchSessionOverview();
+      fetchBillingOverview();
     });
 
     socket.on('sessionUpdate', () => {
       fetchSessionOverview();
+      fetchBillingOverview();
     });
 
     socket.on('paymentRequest', (payload) => {
@@ -477,7 +501,16 @@ export default function Dashboard() {
         return;
       }
       fetchSessionOverview();
+      fetchBillingOverview();
       showPaymentRequestNotification(payload);
+    });
+
+    socket.on('billUpdate', (bill) => {
+      if (String(bill.restaurantId) !== String(restaurantId)) {
+        return;
+      }
+      fetchBillingOverview();
+      fetchSessionOverview();
     });
 
     const scheduleNextDayRefresh = () => {
@@ -491,6 +524,7 @@ export default function Dashboard() {
         setCurrentDate(new Date());
         await fetchOrders(true);
         await fetchSessionOverview();
+        await fetchBillingOverview();
         refreshRestaurant();
       }, nextMidnight.getTime() - now.getTime());
     };
@@ -507,7 +541,7 @@ export default function Dashboard() {
       window.clearTimeout(midnightTimeoutId);
       window.clearInterval(midnightIntervalId);
     };
-  }, [restaurantId, token]);
+  }, [fetchBillingOverview, fetchOrders, fetchSessionOverview, refreshRestaurant, restaurantId]);
 
   const updateOrderStatus = async (orderId, nextStatus) => {
     if (!nextStatus) return;
@@ -572,6 +606,79 @@ export default function Dashboard() {
       });
     } finally {
       setReleasingSessionId('');
+    }
+  };
+
+  const activeBillByTableId = useMemo(() => {
+    const mapping = new Map();
+
+    activeBills.forEach((bill) => {
+      (bill.tableIds || []).forEach((table) => {
+        const tableId = String(table?._id || table);
+        if (!mapping.has(tableId)) {
+          mapping.set(tableId, bill);
+        }
+      });
+    });
+
+    return mapping;
+  }, [activeBills]);
+
+  const approvePayment = async (bill) => {
+    const billId = bill?._id;
+    if (!billId) return;
+
+    const endpoint =
+      bill.paymentStatus === 'AWAITING_APPROVAL'
+        ? getApiUrl(`/api/payment/approve-cash/${billId}`)
+        : getApiUrl(`/api/billing/mark-paid/${billId}`);
+
+    try {
+      setProcessingPaymentBillId(billId);
+      const response = await fetch(endpoint, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const rawBody = await response.text();
+      let data = {};
+
+      try {
+        data = rawBody ? JSON.parse(rawBody) : {};
+      } catch (parseError) {
+        data = { message: rawBody || 'Failed to approve payment' };
+      }
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to approve payment');
+      }
+
+      setIncomingAlert({
+        key: `payment-${billId}-${Date.now()}`,
+        title:
+          bill.paymentStatus === 'AWAITING_APPROVAL'
+            ? 'Cash payment approved'
+            : 'Payment marked as paid',
+        message:
+          data.message ||
+          `Table ${bill.tableIds?.map((table) => table.tableNumber).join(', ') || '-'} has been settled.`,
+        severity: 'success',
+      });
+
+      await fetchBillingOverview();
+      await fetchSessionOverview();
+    } catch (error) {
+      console.error(error);
+      setIncomingAlert({
+        key: `payment-error-${billId}-${Date.now()}`,
+        title: 'Payment update failed',
+        message: error.message || 'Unable to update bill payment status.',
+        severity: 'error',
+      });
+    } finally {
+      setProcessingPaymentBillId('');
     }
   };
 
@@ -726,6 +833,12 @@ export default function Dashboard() {
             {sessionOverview.sessions.length ? (
               <Stack spacing={1.25}>
                 {sessionOverview.sessions.slice(0, 6).map((tableSession) => (
+                  (() => {
+                    const activeBill = activeBillByTableId.get(
+                      String(tableSession.tableId?._id || '')
+                    );
+
+                    return (
                   <Stack
                     key={tableSession._id}
                     direction={{ xs: 'column', md: 'row' }}
@@ -750,6 +863,15 @@ export default function Dashboard() {
                         {' | '}
                         cap {tableSession.tableId?.capacity || 4}
                       </Typography>
+                      {activeBill ? (
+                        <Typography sx={{ color: '#FFB067', fontSize: 13, mt: 0.5 }}>
+                          {activeBill.paymentMethod || 'Payment'} {TITLE_SEPARATOR} {RUPEE_SYMBOL}
+                          {Number(activeBill.totalAmount || 0).toFixed(2)} {TITLE_SEPARATOR}{' '}
+                          {activeBill.paymentStatus === 'AWAITING_APPROVAL'
+                            ? 'Awaiting approval'
+                            : 'Pending payment'}
+                        </Typography>
+                      ) : null}
                     </Box>
 
                     <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
@@ -760,6 +882,25 @@ export default function Dashboard() {
                       />
                       {tableSession.paymentRequest?.status === 'awaiting_approval' ? (
                         <Chip label="Cash Request" size="small" color="warning" />
+                      ) : null}
+                      {activeBill ? (
+                        <Button
+                          size="small"
+                          variant="contained"
+                          color={
+                            activeBill.paymentStatus === 'AWAITING_APPROVAL'
+                              ? 'warning'
+                              : 'success'
+                          }
+                          disabled={processingPaymentBillId === activeBill._id}
+                          onClick={() => approvePayment(activeBill)}
+                        >
+                          {processingPaymentBillId === activeBill._id
+                            ? 'Updating...'
+                            : activeBill.paymentStatus === 'AWAITING_APPROVAL'
+                              ? 'Approve Payment'
+                              : 'Mark Paid'}
+                        </Button>
                       ) : null}
                       <Button
                         size="small"
@@ -772,6 +913,8 @@ export default function Dashboard() {
                       </Button>
                     </Stack>
                   </Stack>
+                    );
+                  })()
                 ))}
               </Stack>
             ) : (

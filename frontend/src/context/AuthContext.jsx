@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { getApiUrl } from '../config/api';
 
 const AuthContext = createContext();
@@ -37,7 +37,7 @@ const getStoredAuth = () => {
 export const AuthProvider = ({ children }) => {
   const [{ token, user, restaurant }, setAuthState] = useState(getStoredAuth);
 
-  const setRestaurantProfile = (nextRestaurant) => {
+  const setRestaurantProfile = useCallback((nextRestaurant) => {
     if (nextRestaurant) {
       localStorage.setItem('restaurantProfile', JSON.stringify(nextRestaurant));
     } else {
@@ -45,9 +45,9 @@ export const AuthProvider = ({ children }) => {
     }
 
     setAuthState((current) => ({ ...current, restaurant: nextRestaurant }));
-  };
+  }, []);
 
-  const login = (payload) => {
+  const login = useCallback((payload) => {
     if (typeof payload === 'string') {
       const nextState = { token: payload, user: null, restaurant: null };
       localStorage.setItem('adminToken', payload);
@@ -73,16 +73,16 @@ export const AuthProvider = ({ children }) => {
       localStorage.removeItem('restaurantProfile');
     }
     setAuthState({ token: nextToken, user: nextUser, restaurant: nextRestaurant });
-  };
+  }, []);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem('adminToken');
     localStorage.removeItem('adminUser');
     localStorage.removeItem('restaurantProfile');
     setAuthState({ token: null, user: null, restaurant: null });
-  };
+  }, []);
 
-  const refreshRestaurant = async () => {
+  const refreshRestaurant = useCallback(async () => {
     if (!token || user?.role !== 'RESTAURANT_ADMIN') {
       return null;
     }
@@ -113,7 +113,7 @@ export const AuthProvider = ({ children }) => {
       console.error(error);
       return null;
     }
-  };
+  }, [setRestaurantProfile, token, user?.role]);
 
   useEffect(() => {
     if (!token || user?.role !== 'RESTAURANT_ADMIN') {
@@ -128,17 +128,20 @@ export const AuthProvider = ({ children }) => {
     }
   }, [token, user?.role]);
 
-  const value = {
-    token,
-    user,
-    restaurant,
-    role: user?.role || null,
-    isAuthenticated: Boolean(token),
-    login,
-    logout,
-    refreshRestaurant,
-    setRestaurantProfile,
-  };
+  const value = useMemo(
+    () => ({
+      token,
+      user,
+      restaurant,
+      role: user?.role || null,
+      isAuthenticated: Boolean(token),
+      login,
+      logout,
+      refreshRestaurant,
+      setRestaurantProfile,
+    }),
+    [login, logout, refreshRestaurant, restaurant, setRestaurantProfile, token, user]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
