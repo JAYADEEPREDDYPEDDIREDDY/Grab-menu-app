@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { io } from 'socket.io-client';
 import {
@@ -16,7 +16,17 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Box, Button, Card, Chip, CircularProgress, Stack, Typography } from '@mui/material';
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  Chip,
+  CircularProgress,
+  Snackbar,
+  Stack,
+  Typography,
+} from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import DragIndicatorRoundedIcon from '@mui/icons-material/DragIndicatorRounded';
 import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded';
@@ -68,6 +78,9 @@ const actionConfig = {
   },
 };
 
+const RUPEE_SYMBOL = '\u20B9';
+const TITLE_SEPARATOR = '\u2022';
+
 const normalizeOrders = (incomingOrders) =>
   incomingOrders.filter(
     (order) =>
@@ -78,6 +91,11 @@ const normalizeOrders = (incomingOrders) =>
       order.items.length > 0 &&
       order.items.every((item) => item.menuItemId)
   );
+
+const isSameDay = (leftDate, rightDate) =>
+  leftDate.getFullYear() === rightDate.getFullYear() &&
+  leftDate.getMonth() === rightDate.getMonth() &&
+  leftDate.getDate() === rightDate.getDate();
 
 function formatOrderId(order) {
   const value = order._id?.slice(-4) || '0';
@@ -172,7 +190,8 @@ function SortableOrderCard({ order, onAdvance }) {
               fontSize: 16,
             }}
           >
-            ${Number(order.totalPrice || 0).toFixed(2)}
+            {RUPEE_SYMBOL}
+            {Number(order.totalPrice || 0).toFixed(2)}
           </Typography>
         </Stack>
 
@@ -192,7 +211,7 @@ function SortableOrderCard({ order, onAdvance }) {
         {order.status === 'Completed' ? (
           <Stack direction="row" spacing={1} alignItems="center" color="#22C55E">
             <CheckCircleRoundedIcon sx={{ fontSize: 20 }} />
-            <Typography sx={{ fontWeight: 700 }}>Completed - Bill generated</Typography>
+            <Typography sx={{ fontWeight: 700 }}>Completed - Ready for billing</Typography>
           </Stack>
         ) : (
           <Button
@@ -246,7 +265,7 @@ function KanbanColumn({ column, orders, badge, onAdvance }) {
               }}
             />
             {column.key === 'Completed' ? (
-              <Typography sx={{ color: 'text.secondary', fontSize: 14 }}>Auto-bills</Typography>
+              <Typography sx={{ color: 'text.secondary', fontSize: 14 }}>Ready to bill</Typography>
             ) : null}
           </Stack>
         </Stack>
@@ -286,39 +305,152 @@ function KanbanColumn({ column, orders, badge, onAdvance }) {
 export default function Dashboard() {
   const { token, restaurant, user, refreshRestaurant } = useAuth();
   const [orders, setOrders] = useState([]);
+  const [sessionOverview, setSessionOverview] = useState({
+    counts: { active: 0, locked: 0, billing: 0 },
+    sessions: [],
+  });
   const [loading, setLoading] = useState(true);
+  const [currentDate, setCurrentDate] = useState(() => new Date());
+  const [incomingAlert, setIncomingAlert] = useState(null);
+  const [releasingSessionId, setReleasingSessionId] = useState('');
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const restaurantId = user?.restaurantId;
+  const knownOrderIdsRef = useRef(new Set());
+
+  const showIncomingOrderNotification = (order) => {
+    const tableNumber = order.tableId?.tableNumber || '-';
+    const itemCount = Array.isArray(order.items)
+      ? order.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0)
+      : 0;
+    const message = `New order from Table ${tableNumber}: ${itemCount} item${itemCount === 1 ? '' : 's'}`;
+
+    setIncomingAlert({
+      key: `${order._id}-${Date.now()}`,
+      title: 'New order received',
+      message,
+    });
+
+    if (typeof document !== 'undefined') {
+      document.title = `New Order ${TITLE_SEPARATOR} ${restaurant?.name || 'Dashboard'}`;
+      window.setTimeout(() => {
+        document.title = `${restaurant?.name || 'Restaurant'} Dashboard`;
+      }, 4000);
+    }
+
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'granted') {
+        const notification = new Notification('New order received', {
+          body: message,
+          tag: `order-${order._id}`,
+        });
+        notification.onclick = () => {
+          window.focus();
+          notification.close();
+        };
+      } else if (Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
+      }
+    }
+  };
+
+  const showPaymentRequestNotification = (payload) => {
+    setIncomingAlert({
+      key: `${payload.sessionId || payload.billId}-${Date.now()}`,
+      title: 'Cash payment requested',
+      message: `Table ${payload.tableNumber || '-'} is waiting for cash collection.`,
+      severity: 'warning',
+    });
+  };
 
   useEffect(() => {
-    const fetchOrders = async () => {
+    let isMounted = true;
+
+    const fetchOrders = async (showLoader = false) => {
+      if (showLoader && isMounted) {
+        setLoading(true);
+      }
+
       try {
         const res = await fetch(getApiUrl('/api/orders'), {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (res.ok) {
-          setOrders(normalizeOrders(await res.json()));
+
+        if (res.ok && isMounted) {
+          const normalized = normalizeOrders(await res.json());
+          setOrders(normalized);
+          knownOrderIdsRef.current = new Set(normalized.map((order) => order._id));
         }
       } catch (error) {
         console.error(error);
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    const fetchSessionOverview = async () => {
+      try {
+        const res = await fetch(getApiUrl('/api/session/overview'), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!res.ok) {
+          return;
+        }
+
+        const data = await res.json();
+        if (isMounted) {
+          setSessionOverview({
+            counts: data.counts || { active: 0, locked: 0, billing: 0 },
+            sessions: Array.isArray(data.sessions) ? data.sessions : [],
+          });
+        }
+      } catch (error) {
+        console.error(error);
       }
     };
 
     fetchOrders();
+    fetchSessionOverview();
     refreshRestaurant();
 
-    const socket = io(SOCKET_BASE_URL);
+    if (
+      typeof window !== 'undefined' &&
+      'Notification' in window &&
+      Notification.permission === 'default'
+    ) {
+      Notification.requestPermission().catch(() => {});
+    }
+
+    const socket = io(SOCKET_BASE_URL, {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+    });
+
+    socket.on('connect', () => {
+      fetchOrders();
+      fetchSessionOverview();
+    });
 
     socket.on('newOrder', (order) => {
       if (String(order.restaurantId) !== String(restaurantId)) {
         return;
       }
 
+      const isExistingOrder = knownOrderIdsRef.current.has(order._id);
+      knownOrderIdsRef.current.add(order._id);
+
       setOrders((current) =>
         normalizeOrders([{ ...order }, ...current.filter((item) => item._id !== order._id)])
       );
+
+      if (!isExistingOrder) {
+        showIncomingOrderNotification(order);
+      }
     });
 
     socket.on('orderStatusUpdate', (updatedOrder) => {
@@ -326,14 +458,55 @@ export default function Dashboard() {
         return;
       }
 
+      knownOrderIdsRef.current.add(updatedOrder._id);
+
       setOrders((current) =>
         normalizeOrders(
           current.map((order) => (order._id === updatedOrder._id ? updatedOrder : order))
         )
       );
+      fetchSessionOverview();
     });
 
-    return () => socket.disconnect();
+    socket.on('sessionUpdate', () => {
+      fetchSessionOverview();
+    });
+
+    socket.on('paymentRequest', (payload) => {
+      if (String(payload.restaurantId) !== String(restaurantId)) {
+        return;
+      }
+      fetchSessionOverview();
+      showPaymentRequestNotification(payload);
+    });
+
+    const scheduleNextDayRefresh = () => {
+      const now = new Date();
+      const nextMidnight = new Date(now);
+      nextMidnight.setHours(24, 0, 5, 0);
+
+      return window.setTimeout(async () => {
+        if (!isMounted) return;
+
+        setCurrentDate(new Date());
+        await fetchOrders(true);
+        await fetchSessionOverview();
+        refreshRestaurant();
+      }, nextMidnight.getTime() - now.getTime());
+    };
+
+    let midnightTimeoutId = scheduleNextDayRefresh();
+    const midnightIntervalId = window.setInterval(() => {
+      window.clearTimeout(midnightTimeoutId);
+      midnightTimeoutId = scheduleNextDayRefresh();
+    }, 60 * 60 * 1000);
+
+    return () => {
+      isMounted = false;
+      socket.disconnect();
+      window.clearTimeout(midnightTimeoutId);
+      window.clearInterval(midnightIntervalId);
+    };
   }, [restaurantId, token]);
 
   const updateOrderStatus = async (orderId, nextStatus) => {
@@ -357,6 +530,48 @@ export default function Dashboard() {
     } catch (error) {
       console.error(error);
       window.location.reload();
+    }
+  };
+
+  const releaseTable = async (sessionId) => {
+    try {
+      setReleasingSessionId(sessionId);
+      const response = await fetch(getApiUrl(`/api/session/${sessionId}/release`), {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const rawBody = await response.text();
+      let data = {};
+
+      try {
+        data = rawBody ? JSON.parse(rawBody) : {};
+      } catch (parseError) {
+        data = { message: rawBody || 'Failed to release table' };
+      }
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to release table');
+      }
+
+      setIncomingAlert({
+        key: `release-${sessionId}-${Date.now()}`,
+        title: 'Table released',
+        message: data.message || 'The table session has been released.',
+        severity: 'success',
+      });
+    } catch (error) {
+      console.error(error);
+      setIncomingAlert({
+        key: `release-error-${sessionId}-${Date.now()}`,
+        title: 'Release failed',
+        message: error.message || 'Unable to release the table session.',
+        severity: 'error',
+      });
+    } finally {
+      setReleasingSessionId('');
     }
   };
 
@@ -408,17 +623,28 @@ export default function Dashboard() {
     updateOrderStatus(active.id, nextStatus);
   };
 
+  const todayOrders = useMemo(
+    () => orders.filter((order) => isSameDay(new Date(order.createdAt), currentDate)),
+    [currentDate, orders]
+  );
+
   const liveOrderCount = orders.filter((order) => order.status !== 'Completed').length;
-  const totalRevenueToday = orders.reduce((sum, order) => sum + Number(order.totalPrice || 0), 0);
-  const completedCount = orders.filter((order) => order.status === 'Completed').length;
+  const totalRevenueToday = todayOrders.reduce(
+    (sum, order) => sum + Number(order.totalPrice || 0),
+    0
+  );
+  const completedCount = todayOrders.filter((order) => order.status === 'Completed').length;
 
   const summaryCards = useMemo(
     () => [
       { label: 'Live Orders', value: liveOrderCount },
       { label: 'Completed Today', value: completedCount },
-      { label: 'Revenue', value: `$${totalRevenueToday.toFixed(2)}` },
+      { label: 'Revenue Today', value: `${RUPEE_SYMBOL}${totalRevenueToday.toFixed(2)}` },
+      { label: 'Active Tables', value: sessionOverview.counts.active },
+      { label: 'Locked Tables', value: sessionOverview.counts.locked },
+      { label: 'Billing In Progress', value: sessionOverview.counts.billing },
     ],
-    [completedCount, liveOrderCount, totalRevenueToday]
+    [completedCount, liveOrderCount, sessionOverview.counts.active, sessionOverview.counts.billing, sessionOverview.counts.locked, totalRevenueToday]
   );
 
   if (loading) {
@@ -433,74 +659,183 @@ export default function Dashboard() {
   }
 
   return (
-    <Stack spacing={4}>
-      <Card sx={{ p: 3.5, borderRadius: '24px', backgroundColor: '#1A1715' }}>
-        <Stack
-          direction={{ xs: 'column', xl: 'row' }}
-          spacing={3}
-          justifyContent="space-between"
-          alignItems={{ xs: 'flex-start', xl: 'center' }}
-        >
-          <Box>
-            <Typography variant="h3" sx={{ mb: 1 }}>
-              {restaurant?.name || 'Restaurant'} Live Orders
-            </Typography>
-            <Typography variant="subtitle1">
-              Only real customer orders from this restaurant and table flow into this board.
-            </Typography>
+    <>
+      <Stack spacing={4}>
+        <Card sx={{ p: 3.5, borderRadius: '24px', backgroundColor: '#1A1715' }}>
+          <Stack
+            direction={{ xs: 'column', xl: 'row' }}
+            spacing={3}
+            justifyContent="space-between"
+            alignItems={{ xs: 'flex-start', xl: 'center' }}
+          >
+            <Box>
+              <Typography variant="h3" sx={{ mb: 1 }}>
+                {restaurant?.name || 'Restaurant'} Live Orders
+              </Typography>
+              <Typography variant="subtitle1">
+                Only real customer orders from this restaurant and table flow into this board.
+              </Typography>
+            </Box>
+
+            <Chip
+              icon={<CircleRoundedIcon sx={{ color: '#22C55E !important', fontSize: 14 }} />}
+              label="Receiving live updates"
+              sx={{
+                height: 46,
+                px: 1.25,
+                borderRadius: '999px',
+                backgroundColor: 'rgba(255,255,255,0.04)',
+                color: '#FFFFFF',
+                '& .MuiChip-label': { fontWeight: 700, px: 0.75 },
+              }}
+            />
+          </Stack>
+
+          <Box
+            sx={{
+              mt: 3,
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' },
+              gap: 2,
+            }}
+          >
+            {summaryCards.map((card) => (
+              <Card
+                key={card.label}
+                sx={{ p: 2.25, borderRadius: '18px', backgroundColor: '#221F1C' }}
+              >
+                <Typography color="text.secondary" sx={{ mb: 0.75 }}>
+                  {card.label}
+                </Typography>
+                <Typography variant="h5">{card.value}</Typography>
+              </Card>
+            ))}
           </Box>
 
-          <Chip
-            icon={<CircleRoundedIcon sx={{ color: '#22C55E !important', fontSize: 14 }} />}
-            label="Receiving live updates"
+          <Card
             sx={{
-              height: 46,
-              px: 1.25,
-              borderRadius: '999px',
-              backgroundColor: 'rgba(255,255,255,0.04)',
-              color: '#FFFFFF',
-              '& .MuiChip-label': { fontWeight: 700, px: 0.75 },
+              mt: 3,
+              p: 2.25,
+              borderRadius: '18px',
+              backgroundColor: '#221F1C',
             }}
-          />
-        </Stack>
+          >
+            <Typography variant="h6" sx={{ mb: 1.75 }}>
+              Live Table Sessions
+            </Typography>
+            {sessionOverview.sessions.length ? (
+              <Stack spacing={1.25}>
+                {sessionOverview.sessions.slice(0, 6).map((tableSession) => (
+                  <Stack
+                    key={tableSession._id}
+                    direction={{ xs: 'column', md: 'row' }}
+                    justifyContent="space-between"
+                    alignItems={{ xs: 'flex-start', md: 'center' }}
+                    spacing={1}
+                    sx={{
+                      borderRadius: '14px',
+                      px: 1.75,
+                      py: 1.25,
+                      backgroundColor: 'rgba(255,255,255,0.03)',
+                    }}
+                  >
+                    <Box>
+                      <Typography sx={{ fontWeight: 700 }}>
+                        Table {tableSession.tableId?.tableNumber || '-'}
+                      </Typography>
+                      <Typography sx={{ color: 'text.secondary', fontSize: 13 }}>
+                        {tableSession.persons || 1} guest{Number(tableSession.persons || 1) === 1 ? '' : 's'}
+                        {' | '}
+                        {tableSession.orders?.length || 0} order{(tableSession.orders?.length || 0) === 1 ? '' : 's'}
+                        {' | '}
+                        cap {tableSession.tableId?.capacity || 4}
+                      </Typography>
+                    </Box>
 
-        <Box
-          sx={{
-            mt: 3,
-            display: 'grid',
-            gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' },
-            gap: 2,
-          }}
-        >
-          {summaryCards.map((card) => (
-            <Card key={card.label} sx={{ p: 2.25, borderRadius: '18px', backgroundColor: '#221F1C' }}>
-              <Typography color="text.secondary" sx={{ mb: 0.75 }}>
-                {card.label}
+                    <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
+                      <Chip
+                        label={tableSession.status}
+                        size="small"
+                        color={tableSession.status === 'BILLING' ? 'warning' : 'success'}
+                      />
+                      {tableSession.paymentRequest?.status === 'awaiting_approval' ? (
+                        <Chip label="Cash Request" size="small" color="warning" />
+                      ) : null}
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="warning"
+                        disabled={releasingSessionId === tableSession._id}
+                        onClick={() => releaseTable(tableSession._id)}
+                      >
+                        {releasingSessionId === tableSession._id ? 'Releasing...' : 'Release Table'}
+                      </Button>
+                    </Stack>
+                  </Stack>
+                ))}
+              </Stack>
+            ) : (
+              <Typography color="text.secondary">
+                No active table sessions right now.
               </Typography>
-              <Typography variant="h5">{card.value}</Typography>
-            </Card>
-          ))}
-        </Box>
-      </Card>
-      <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragEnd={handleDragEnd}>
-        <Box
+            )}
+          </Card>
+        </Card>
+
+        <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragEnd={handleDragEnd}>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', xl: 'repeat(3, minmax(0, 1fr))' },
+              gap: 3,
+            }}
+          >
+            {columns.map((column) => (
+              <KanbanColumn
+                key={column.key}
+                column={column}
+                orders={getColumnOrders(column.key)}
+                badge={getColumnOrders(column.key).length}
+                onAdvance={updateOrderStatus}
+              />
+            ))}
+          </Box>
+        </DndContext>
+      </Stack>
+
+      <Snackbar
+        key={incomingAlert?.key}
+        open={Boolean(incomingAlert)}
+        autoHideDuration={5000}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+        onClose={() => setIncomingAlert(null)}
+      >
+        <Alert
+          onClose={() => setIncomingAlert(null)}
+          severity={incomingAlert?.severity || 'success'}
+          variant="filled"
           sx={{
-            display: 'grid',
-            gridTemplateColumns: { xs: '1fr', xl: 'repeat(3, minmax(0, 1fr))' },
-            gap: 3,
+            minWidth: 320,
+            borderRadius: '16px',
+            backgroundColor:
+              incomingAlert?.severity === 'warning'
+                ? '#D97706'
+                : incomingAlert?.severity === 'error'
+                  ? '#DC2626'
+                  : '#16A34A',
+            color: '#FFFFFF',
+            boxShadow: '0 18px 42px rgba(0,0,0,0.28)',
+            '& .MuiAlert-message': { display: 'grid', gap: 0.25 },
           }}
         >
-          {columns.map((column) => (
-            <KanbanColumn
-              key={column.key}
-              column={column}
-              orders={getColumnOrders(column.key)}
-              badge={getColumnOrders(column.key).length}
-              onAdvance={updateOrderStatus}
-            />
-          ))}
-        </Box>
-      </DndContext>
-    </Stack>
+          <Typography sx={{ fontWeight: 700, fontSize: 15 }}>
+            {incomingAlert?.title}
+          </Typography>
+          <Typography sx={{ fontSize: 13.5, opacity: 0.92 }}>
+            {incomingAlert?.message}
+          </Typography>
+        </Alert>
+      </Snackbar>
+    </>
   );
 }

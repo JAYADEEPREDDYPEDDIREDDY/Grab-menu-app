@@ -11,6 +11,12 @@ const tableSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
+  capacity: {
+    type: Number,
+    required: true,
+    min: 1,
+    default: 4,
+  },
   qrCodeData: {
     type: String,
     required: true,

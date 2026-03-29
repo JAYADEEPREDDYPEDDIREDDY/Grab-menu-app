@@ -122,13 +122,13 @@ export default function OrderTracking() {
                   <span className="font-bold text-accent">{it.quantity}x</span>
                   <span>{it.menuItemId?.name || 'Unknown Item'}</span>
                 </div>
-                <span className="text-secondary">${(it.quantity * it.priceAtTimeOfOrder).toFixed(2)}</span>
+                <span className="text-secondary">₹{(it.quantity * it.priceAtTimeOfOrder).toFixed(2)}</span>
               </div>
             ))}
           </div>
           <div className="mt-6 pt-4 border-t border-border flex justify-between items-center font-bold text-xl">
              <span>Total</span>
-             <span className="text-accent gradient-text">${order.totalPrice.toFixed(2)}</span>
+             <span className="text-accent gradient-text">₹{order.totalPrice.toFixed(2)}</span>
           </div>
         </div>
       </div>

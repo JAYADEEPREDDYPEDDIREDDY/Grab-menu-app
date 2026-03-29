@@ -3,6 +3,7 @@ const router = express.Router();
 const Order = require('../models/Order');
 const Table = require('../models/Table');
 const MenuItem = require('../models/MenuItem');
+const TableSession = require('../models/TableSession');
 const auth = require('../middleware/auth.middleware');
 const { requireRole } = require('../middleware/auth.middleware');
 
@@ -59,6 +60,36 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: 'Restaurant reference is required' });
     }
 
+    const sessionId = payload.sessionId;
+    const sessionToken = payload.sessionToken;
+
+    const session = await TableSession.findOne({
+      _id: sessionId,
+      tableId: resolvedTableId,
+      restaurantId,
+      isActive: true,
+    });
+
+    if (!session) {
+      return res.status(403).json({ message: 'No active table session found.' });
+    }
+
+    if (session.sessionToken !== sessionToken) {
+      return res.status(403).json({ message: 'Session token mismatch.' });
+    }
+
+    if (session.status === 'COMPLETED') {
+      return res.status(400).json({ message: 'This table session has already been completed.' });
+    }
+
+    if (session.status === 'BILLING') {
+      return res.status(400).json({ message: 'This table session is locked for billing.' });
+    }
+
+    if (session.status !== 'ACTIVE') {
+      return res.status(400).json({ message: 'This table session is not active.' });
+    }
+
     const requestedItems = Array.isArray(payload.items) ? payload.items : [];
     if (!requestedItems.length) {
       return res.status(400).json({ message: 'Order items are required' });
@@ -97,10 +128,18 @@ router.post('/', async (req, res) => {
     const newOrder = new Order(payload);
     const order = await newOrder.save();
     const populatedOrder = await Order.findById(order._id).populate('tableId').populate('items.menuItemId');
+
+    session.orders.push(order._id);
+    if (payload.customerName) {
+      session.customerName = String(payload.customerName).trim();
+    }
+    session.lastActivityAt = new Date();
+    await session.save();
     
     // Emit via socket io to admin
     const io = req.app.get('io');
     io.emit('newOrder', populatedOrder);
+    io.emit('sessionUpdate', await TableSession.findById(session._id).populate('tableId'));
 
     res.json(populatedOrder);
   } catch (err) {
@@ -141,6 +180,34 @@ router.put('/:id/status', auth, requireRole('RESTAURANT_ADMIN'), async (req, res
 
 // @route   GET /api/orders/:id
 // @desc    Get a specific order (for customer tracking)
+router.get('/session/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { sessionToken } = req.query;
+
+    const session = await TableSession.findById(sessionId);
+    if (!session) {
+      return res.status(404).json({ message: 'Session not found' });
+    }
+
+    if (!sessionToken || session.sessionToken !== sessionToken) {
+      return res.status(403).json({ message: 'Session token mismatch.' });
+    }
+
+    const orders = await Order.find({
+      _id: { $in: session.orders || [] },
+    })
+      .populate('tableId')
+      .populate('items.menuItemId')
+      .sort({ createdAt: -1 });
+
+    res.json(orders);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const order = await Order.findById(req.params.id).populate('tableId').populate('items.menuItemId');

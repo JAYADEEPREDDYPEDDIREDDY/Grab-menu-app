@@ -287,7 +287,7 @@ export default function MenuManager() {
                   </TableCell>
                   <TableCell>{item.category}</TableCell>
                   <TableCell sx={{ color: '#FF8C2B', fontWeight: 700 }}>
-                    ${Number(item.price || 0).toFixed(2)}
+                    ₹{Number(item.price || 0).toFixed(2)}
                   </TableCell>
                   <TableCell align="right">
                     <IconButton onClick={() => handleEdit(item)}>

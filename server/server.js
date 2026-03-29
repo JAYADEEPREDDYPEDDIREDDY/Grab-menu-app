@@ -64,6 +64,9 @@ app.use('/api/restaurants', require('./routes/restaurant.routes'));
 app.use('/api/menu', require('./routes/menu.routes'));
 app.use('/api/orders', require('./routes/order.routes'));
 app.use('/api/tables', require('./routes/table.routes'));
+app.use('/api/billing', require('./routes/billing.routes'));
+app.use('/api/session', require('./routes/session.routes'));
+app.use('/api/payment', require('./routes/payment.routes'));
 
 // Basic health check route
 app.get('/', (req, res) => {

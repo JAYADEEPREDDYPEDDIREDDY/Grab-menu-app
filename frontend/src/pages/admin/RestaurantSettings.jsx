@@ -12,6 +12,10 @@ const emptyForm = {
   phone: '',
   address: '',
   logoUrl: '',
+  paymentQrUrl: '',
+  upiId: '',
+  gstRate: '5',
+  serviceChargeRate: '0',
   dashboardTheme: 'amber',
 };
 
@@ -34,6 +38,10 @@ export default function RestaurantSettings() {
         phone: restaurant.phone || '',
         address: restaurant.address || '',
         logoUrl: restaurant.logoUrl || '',
+        paymentQrUrl: restaurant.paymentQrUrl || '',
+        upiId: restaurant.upiId || '',
+        gstRate: String(restaurant.gstRate ?? 5),
+        serviceChargeRate: String(restaurant.serviceChargeRate ?? 0),
         dashboardTheme: restaurant.dashboardTheme || 'amber',
       });
     }
@@ -48,6 +56,21 @@ export default function RestaurantSettings() {
       setForm((current) => ({
         ...current,
         logoUrl: typeof reader.result === 'string' ? reader.result : current.logoUrl,
+      }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handlePaymentQrUpload = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setForm((current) => ({
+        ...current,
+        paymentQrUrl:
+          typeof reader.result === 'string' ? reader.result : current.paymentQrUrl,
       }));
     };
     reader.readAsDataURL(file);
@@ -147,6 +170,37 @@ export default function RestaurantSettings() {
                 value={form.logoUrl}
                 onChange={(event) => setForm((current) => ({ ...current, logoUrl: event.target.value }))}
               />
+              <TextField
+                label="Payment QR Image URL"
+                sx={{ gridColumn: { md: '1 / -1' } }}
+                value={form.paymentQrUrl}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, paymentQrUrl: event.target.value }))
+                }
+              />
+              <TextField
+                label="UPI ID"
+                value={form.upiId}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, upiId: event.target.value }))
+                }
+              />
+              <TextField
+                label="GST %"
+                type="number"
+                value={form.gstRate}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, gstRate: event.target.value }))
+                }
+              />
+              <TextField
+                label="Service Charge %"
+                type="number"
+                value={form.serviceChargeRate}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, serviceChargeRate: event.target.value }))
+                }
+              />
             </Box>
 
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ xs: 'stretch', sm: 'center' }}>
@@ -154,8 +208,12 @@ export default function RestaurantSettings() {
                 Upload Logo
                 <input hidden accept="image/*" type="file" onChange={handleLogoUpload} />
               </Button>
+              <Button component="label" variant="outlined" startIcon={<UploadRoundedIcon />}>
+                Upload Payment QR
+                <input hidden accept="image/*" type="file" onChange={handlePaymentQrUpload} />
+              </Button>
               <Typography color="text.secondary" sx={{ fontSize: 14 }}>
-                Upload a square logo or paste a hosted image URL above.
+                Upload your restaurant logo, payment QR image, or paste hosted image URLs above.
               </Typography>
             </Stack>
 

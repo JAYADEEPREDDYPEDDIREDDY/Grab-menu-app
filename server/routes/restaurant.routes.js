@@ -64,6 +64,10 @@ router.post('/', auth, requireRole('SUPER_ADMIN'), async (req, res) => {
       subscriptionPlan = 'Free',
       logoUrl = '',
       dashboardTheme = 'amber',
+      paymentQrUrl = '',
+      upiId = '',
+      gstRate = 5,
+      serviceChargeRate = 0,
     } = req.body;
 
     if (!name || !email || !phone || !address) {
@@ -93,6 +97,10 @@ router.post('/', auth, requireRole('SUPER_ADMIN'), async (req, res) => {
       adminUsername,
       logoUrl,
       dashboardTheme,
+      paymentQrUrl,
+      upiId,
+      gstRate: Math.max(0, Number(gstRate) || 0),
+      serviceChargeRate: Math.max(0, Number(serviceChargeRate) || 0),
     });
 
     await Admin.create({
@@ -119,7 +127,17 @@ router.post('/', auth, requireRole('SUPER_ADMIN'), async (req, res) => {
 
 router.patch('/current/profile', auth, requireRole('RESTAURANT_ADMIN'), async (req, res) => {
   try {
-    const { name, phone, address, logoUrl, dashboardTheme } = req.body;
+    const {
+      name,
+      phone,
+      address,
+      logoUrl,
+      dashboardTheme,
+      paymentQrUrl,
+      upiId,
+      gstRate,
+      serviceChargeRate,
+    } = req.body;
     const updates = {};
 
     if (typeof name === 'string' && name.trim()) {
@@ -136,6 +154,22 @@ router.patch('/current/profile', auth, requireRole('RESTAURANT_ADMIN'), async (r
 
     if (typeof logoUrl === 'string') {
       updates.logoUrl = logoUrl.trim();
+    }
+
+    if (typeof paymentQrUrl === 'string') {
+      updates.paymentQrUrl = paymentQrUrl.trim();
+    }
+
+    if (typeof upiId === 'string') {
+      updates.upiId = upiId.trim();
+    }
+
+    if (gstRate !== undefined) {
+      updates.gstRate = Math.max(0, Number(gstRate) || 0);
+    }
+
+    if (serviceChargeRate !== undefined) {
+      updates.serviceChargeRate = Math.max(0, Number(serviceChargeRate) || 0);
     }
 
     if (dashboardTheme !== undefined) {

@@ -11,7 +11,7 @@ import Analytics from './pages/admin/Analytics';
 import MenuManager from './pages/admin/MenuManager';
 import MenuImport from './pages/admin/MenuImport';
 import TableManager from './pages/admin/TableManager';
-import AdminPlaceholder from './pages/admin/AdminPlaceholder';
+import Billing from './pages/admin/Billing';
 import RestaurantSettings from './pages/admin/RestaurantSettings';
 import SuperAdminLogin from './pages/admin/SuperAdminLogin';
 import SuperAdminDashboard from './pages/admin/SuperAdminDashboard';
@@ -136,12 +136,7 @@ function App() {
                       loginPath="/admin/login"
                     >
                       <AdminLayout>
-                        <AdminPlaceholder
-                          title="Billing"
-                          description="Complete handoff from completed orders into billing workflows."
-                          label="Live-ready shell"
-                          tone="live"
-                        />
+                        <Billing />
                       </AdminLayout>
                     </ProtectedRoute>
                   }

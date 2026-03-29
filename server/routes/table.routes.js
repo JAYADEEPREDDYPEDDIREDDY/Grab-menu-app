@@ -74,10 +74,14 @@ router.get('/:id', async (req, res) => {
 // @desc    Add a new table (generates QR content logically)
 router.post('/', auth, requireRole('RESTAURANT_ADMIN'), async (req, res) => {
   try {
-    const { tableNumber, domainUrl } = req.body;
+    const { tableNumber, capacity, domainUrl } = req.body;
     const parsedTableNumber = Number.parseInt(tableNumber, 10);
+    const parsedCapacity = Number.parseInt(capacity, 10);
     if (!Number.isInteger(parsedTableNumber) || parsedTableNumber < 1) {
       return res.status(400).json({ message: 'Table number must be a positive integer' });
+    }
+    if (!Number.isInteger(parsedCapacity) || parsedCapacity < 1) {
+      return res.status(400).json({ message: 'Table capacity must be a positive integer' });
     }
 
     let table = await Table.findOne({
@@ -96,6 +100,7 @@ router.post('/', auth, requireRole('RESTAURANT_ADMIN'), async (req, res) => {
     table = new Table({
       restaurantId: req.user.restaurantId,
       tableNumber: parsedTableNumber,
+      capacity: parsedCapacity,
       qrCodeData,
     });
     await table.save();
@@ -104,6 +109,59 @@ router.post('/', auth, requireRole('RESTAURANT_ADMIN'), async (req, res) => {
   } catch (err) {
     console.error(err.message);
     res.status(500).json({ message: 'Server Error' });
+  }
+});
+
+// @route   PATCH /api/tables/:id
+// @desc    Update a table
+router.patch('/:id', auth, requireRole('RESTAURANT_ADMIN'), async (req, res) => {
+  try {
+    const updates = {};
+
+    if (req.body.tableNumber !== undefined) {
+      const parsedTableNumber = Number.parseInt(req.body.tableNumber, 10);
+      if (!Number.isInteger(parsedTableNumber) || parsedTableNumber < 1) {
+        return res.status(400).json({ message: 'Table number must be a positive integer' });
+      }
+      updates.tableNumber = parsedTableNumber;
+    }
+
+    if (req.body.capacity !== undefined) {
+      const parsedCapacity = Number.parseInt(req.body.capacity, 10);
+      if (!Number.isInteger(parsedCapacity) || parsedCapacity < 1) {
+        return res.status(400).json({ message: 'Table capacity must be a positive integer' });
+      }
+      updates.capacity = parsedCapacity;
+    }
+
+    let table = await Table.findOne({
+      _id: req.params.id,
+      restaurantId: req.user.restaurantId,
+    });
+
+    if (!table) {
+      return res.status(404).json({ message: 'Table not found' });
+    }
+
+    const nextTableNumber = updates.tableNumber ?? table.tableNumber;
+    const conflict = await Table.findOne({
+      _id: { $ne: table._id },
+      restaurantId: req.user.restaurantId,
+      tableNumber: nextTableNumber,
+    });
+
+    if (conflict) {
+      return res.status(400).json({ message: 'Another table already uses this table number' });
+    }
+
+    Object.assign(table, updates);
+    await normalizeTableQr(table, req.body.domainUrl);
+    await table.save();
+
+    return res.json(table);
+  } catch (err) {
+    console.error(err.message);
+    return res.status(500).json({ message: 'Server Error' });
   }
 });
 

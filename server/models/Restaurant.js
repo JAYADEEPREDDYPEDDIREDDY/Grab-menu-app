@@ -46,6 +46,26 @@ const restaurantSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    paymentQrUrl: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    upiId: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    gstRate: {
+      type: Number,
+      default: 5,
+      min: 0,
+    },
+    serviceChargeRate: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     dashboardTheme: {
       type: String,
       enum: ['amber', 'emerald', 'ocean', 'rose'],

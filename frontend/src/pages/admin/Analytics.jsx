@@ -40,7 +40,7 @@ const getStartOfWeek = (date) => {
   return nextDate;
 };
 
-const formatCurrency = (value) => `$${Number(value || 0).toFixed(2)}`;
+const formatCurrency = (value) => `₹${Number(value || 0).toFixed(2)}`;
 
 export default function Analytics() {
   const { token, restaurant } = useAuth();

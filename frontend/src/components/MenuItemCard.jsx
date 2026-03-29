@@ -1,7 +1,9 @@
 import { useCart } from '../context/CartContext';
 import { Clock3, ShoppingBag, UtensilsCrossed } from 'lucide-react';
 
-export default function MenuItemCard({ item, index = 0 }) {
+const RS = '\u20B9';
+
+export default function MenuItemCard({ item, disabled = false, disabledLabel = 'Add to Order' }) {
   const { addToCart } = useCart();
 
   return (
@@ -36,7 +38,8 @@ export default function MenuItemCard({ item, index = 0 }) {
         <div className="flex items-start justify-between gap-4">
           <h3 className="text-[20px] font-bold leading-[1.2] text-white">{item.name}</h3>
           <span className="whitespace-nowrap pt-0.5 text-[18px] font-semibold leading-none text-[#FF8C2B]">
-            ${Number(item.price || 0).toFixed(2)}
+            {RS}
+            {Number(item.price || 0).toFixed(2)}
           </span>
         </div>
 
@@ -47,10 +50,15 @@ export default function MenuItemCard({ item, index = 0 }) {
         <button
           type="button"
           onClick={() => addToCart(item)}
-          className="mt-auto flex h-[48px] w-full items-center justify-center gap-2 rounded-[20px] bg-[#FF8C2B] px-5 font-semibold text-white shadow-[0_12px_26px_rgba(255,140,43,0.22)] transition-all duration-300 hover:translate-y-[-1px] hover:scale-[1.01] hover:brightness-105"
+          disabled={disabled}
+          className={`mt-auto flex h-[48px] w-full items-center justify-center gap-2 rounded-[20px] px-5 font-semibold text-white shadow-[0_12px_26px_rgba(255,140,43,0.22)] transition-all duration-300 ${
+            disabled
+              ? 'cursor-not-allowed bg-[#6E6258] opacity-70 shadow-none'
+              : 'bg-[#FF8C2B] hover:translate-y-[-1px] hover:scale-[1.01] hover:brightness-105'
+          }`}
         >
           <ShoppingBag size={16} />
-          <span>Add to Order</span>
+          <span>{disabled ? disabledLabel : 'Add to Order'}</span>
         </button>
       </div>
     </article>
