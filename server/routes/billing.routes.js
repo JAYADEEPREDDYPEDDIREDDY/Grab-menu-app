@@ -26,6 +26,15 @@ const getPaymentLabel = (status) => {
   return 'Pending Payment';
 };
 
+const isRenderableBill = (bill) =>
+  Array.isArray(bill?.tableIds) &&
+  bill.tableIds.length > 0 &&
+  Array.isArray(bill?.orderIds) &&
+  bill.orderIds.length > 0 &&
+  Array.isArray(bill?.lineItems) &&
+  bill.lineItems.length > 0 &&
+  Number(bill.totalAmount || 0) > 0;
+
 const emitBillUpdate = async (req, billId) => {
   const io = req.app.get('io');
   const bill = await populateBill(Bill.findById(billId));
@@ -202,7 +211,17 @@ router.get('/overview', auth, requireRole('RESTAURANT_ADMIN'), async (req, res) 
       populateBill(Bill.find({ restaurantId }).sort({ createdAt: -1 })),
     ]);
 
-    const activeBills = bills
+    const staleBillIds = bills
+      .filter((bill) => !isRenderableBill(bill))
+      .map((bill) => bill._id);
+
+    if (staleBillIds.length) {
+      await Bill.deleteMany({ _id: { $in: staleBillIds } });
+    }
+
+    const validBills = bills.filter((bill) => isRenderableBill(bill));
+
+    const activeBills = validBills
       .filter((bill) => bill.paymentStatus !== 'PAID')
       .map((bill) => ({
         ...bill.toObject(),
@@ -213,7 +232,7 @@ router.get('/overview', auth, requireRole('RESTAURANT_ADMIN'), async (req, res) 
       (bill) => bill.paymentStatus === 'AWAITING_APPROVAL'
     );
 
-    const history = bills
+    const history = validBills
       .filter((bill) => bill.paymentStatus === 'PAID')
       .map((bill) => ({
         ...bill.toObject(),

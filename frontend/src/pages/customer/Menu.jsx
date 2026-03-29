@@ -523,13 +523,12 @@ export default function Menu() {
 
   const billingInProgress = session?.status === 'BILLING';
   const hasLockedTableMessage = Boolean(tableLockedMessage);
-  const sessionMissing = !session;
-  const orderingDisabled = sessionMissing || billingInProgress || hasLockedTableMessage;
+  const orderingDisabled = billingInProgress || hasLockedTableMessage;
   const disabledLabel = billingInProgress
     ? 'Billing In Progress'
     : hasLockedTableMessage
       ? 'Table Locked'
-      : 'Start Session First';
+      : '';
 
   if (!tableId || !hasValidTableNumber) {
     return (

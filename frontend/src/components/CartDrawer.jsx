@@ -260,7 +260,7 @@ export default function CartDrawer({
       return;
     }
 
-    if (cart.length === 0 || orderingDisabled) {
+    if (cart.length === 0 || hasLockedOrderState) {
       return;
     }
 
