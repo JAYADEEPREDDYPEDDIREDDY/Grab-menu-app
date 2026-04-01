@@ -13,32 +13,27 @@ import {
   X,
 } from 'lucide-react';
 import { getApiUrl } from '../config/api';
+import './CartDrawer.css';
 
 const RS = '\u20B9';
 
 function QuantityStepper({ quantity, onDecrease, onIncrease, disabled = false }) {
   return (
-    <div className="inline-flex h-[42px] items-center rounded-full bg-[#2A2623] px-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)] transition-all duration-300">
+    <div className="quantity-stepper">
       <button
         type="button"
         onClick={onDecrease}
         disabled={disabled}
-        className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
-          disabled ? 'cursor-not-allowed text-[#6F665D]' : 'text-[#D2C7BB] hover:text-white'
-        }`}
+        className={`quantity-stepper-btn quantity-stepper-btn--minus ${disabled ? 'is-disabled' : ''}`}
       >
         <Minus size={16} />
       </button>
-      <span className="min-w-[30px] text-center text-base font-bold text-white">{quantity}</span>
+      <span className="quantity-stepper-value">{quantity}</span>
       <button
         type="button"
         onClick={onIncrease}
         disabled={disabled}
-        className={`flex h-8 w-8 items-center justify-center rounded-full text-white transition-all ${
-          disabled
-            ? 'cursor-not-allowed bg-[#6F665D] shadow-none'
-            : 'bg-[#FF8C2B] shadow-[0_8px_18px_rgba(255,140,43,0.18)] hover:brightness-105'
-        }`}
+        className={`quantity-stepper-btn quantity-stepper-btn--plus ${disabled ? 'is-disabled' : ''}`}
       >
         <Plus size={16} />
       </button>
@@ -50,21 +45,21 @@ function CartItem({ item, onDecrease, onIncrease, onRemove, disabled = false }) 
   const totalPrice = Number(item.price || 0) * item.quantity;
 
   return (
-    <div className="rounded-[18px] border border-white/[0.04] bg-[#201C19] p-4 shadow-[0_14px_28px_rgba(0,0,0,0.16)]">
-      <div className="flex gap-4">
-        <div className="flex h-[94px] w-[94px] shrink-0 items-center justify-center rounded-[12px] bg-[#2B2420] text-[40px] font-bold text-[#6B625A]">
+    <div className="cart-item">
+      <div className="cart-item-row">
+        <div className="cart-item-avatar">
           {item.name?.charAt(0)?.toUpperCase() || 'C'}
         </div>
-        <div className="flex min-w-0 flex-1 justify-between gap-3">
-          <div className="flex min-w-0 flex-1 flex-col">
-            <h4 className="truncate text-[17px] font-bold leading-[1.2] text-white">
+        <div className="cart-item-body">
+          <div className="cart-item-content">
+            <h4 className="cart-item-title">
               {item.name}
             </h4>
-            <p className="mt-1 text-[14px] font-semibold text-[#FF8C2B]">
+            <p className="cart-item-price">
               {RS}
               {totalPrice.toFixed(2)}
             </p>
-            <div className="mt-4">
+            <div className="cart-item-stepper">
               <QuantityStepper
                 quantity={item.quantity}
                 onDecrease={onDecrease}
@@ -78,11 +73,7 @@ function CartItem({ item, onDecrease, onIncrease, onRemove, disabled = false }) 
             type="button"
             onClick={onRemove}
             disabled={disabled}
-            className={`self-start rounded-full p-2 transition-colors ${
-              disabled
-                ? 'cursor-not-allowed text-[#6F665D]'
-                : 'text-[#9E9387] hover:bg-white/5 hover:text-white'
-            }`}
+            className={`cart-item-remove ${disabled ? 'is-disabled' : ''}`}
           >
             <Trash2 size={18} />
           </button>
@@ -94,34 +85,34 @@ function CartItem({ item, onDecrease, onIncrease, onRemove, disabled = false }) 
 
 function BillPreview({ bill, tableId, restaurantName, onClose }) {
   return (
-    <div className="mb-5 rounded-[20px] border border-white/[0.05] bg-[#201C19] p-4 shadow-[0_14px_28px_rgba(0,0,0,0.16)]">
-      <div className="mb-3 flex items-start justify-between gap-3">
+    <div className="bill-preview">
+      <div className="bill-preview-header">
         <div>
-          <p className="text-lg font-bold text-white">{restaurantName || 'Table Bill'}</p>
-          <p className="mt-1 text-xs uppercase tracking-[0.12em] text-[#FFB76A]">
+          <p className="bill-preview-title">{restaurantName || 'Table Bill'}</p>
+          <p className="bill-preview-table">
             table {tableId}
           </p>
         </div>
         <button
           type="button"
           onClick={onClose}
-          className="rounded-full border border-white/[0.06] px-3 py-1 text-xs font-semibold text-[#CDBEAF] transition-colors hover:bg-white/5 hover:text-white"
+          className="bill-preview-close"
         >
           Close
         </button>
       </div>
 
-      <div className="space-y-2">
+      <div className="bill-preview-items">
         {(bill.lineItems || []).map((item, index) => (
-          <div key={`${item.name}-${index}`} className="flex items-start justify-between gap-3 text-sm">
-            <div className="min-w-0">
-              <p className="font-semibold text-white">{item.name}</p>
-              <p className="text-[#9E9387]">
+          <div key={`${item.name}-${index}`} className="bill-preview-item">
+            <div className="bill-preview-item-info">
+              <p className="bill-preview-item-name">{item.name}</p>
+              <p className="bill-preview-item-meta">
                 {item.quantity} x {RS}
                 {Number(item.unitPrice || 0).toFixed(2)}
               </p>
             </div>
-            <p className="shrink-0 font-semibold text-[#FF8C2B]">
+            <p className="bill-preview-item-total">
               {RS}
               {Number(item.totalPrice || 0).toFixed(2)}
             </p>
@@ -129,26 +120,26 @@ function BillPreview({ bill, tableId, restaurantName, onClose }) {
         ))}
       </div>
 
-      <div className="mt-4 space-y-2 border-t border-white/[0.05] pt-4 text-sm">
-        <div className="flex items-center justify-between text-[#A79B8F]">
+      <div className="bill-preview-summary">
+        <div className="bill-preview-summary-row">
           <span>Subtotal</span>
           <span>{RS}{Number(bill.subtotal || 0).toFixed(2)}</span>
         </div>
-        <div className="flex items-center justify-between text-[#A79B8F]">
+        <div className="bill-preview-summary-row">
           <span>GST ({bill.gstRate || 0}%)</span>
           <span>{RS}{Number(bill.gstAmount || 0).toFixed(2)}</span>
         </div>
-        <div className="flex items-center justify-between text-[#A79B8F]">
+        <div className="bill-preview-summary-row">
           <span>Service ({bill.serviceChargeRate || 0}%)</span>
           <span>{RS}{Number(bill.serviceChargeAmount || 0).toFixed(2)}</span>
         </div>
-        <div className="flex items-center justify-between text-white">
-          <span className="font-bold">Total</span>
-          <span className="text-lg font-bold text-[#FF8C2B]">
+        <div className="bill-preview-summary-row bill-preview-summary-total">
+          <span className="bill-preview-summary-total-label">Total</span>
+          <span className="bill-preview-summary-total-value">
             {RS}{Number(bill.totalAmount || 0).toFixed(2)}
           </span>
         </div>
-        <div className="flex items-center justify-between text-[#A79B8F]">
+        <div className="bill-preview-summary-row">
           <span>Payment Status</span>
           <span>{bill.paymentStatusLabel || bill.paymentStatus}</span>
         </div>
@@ -394,7 +385,7 @@ export default function CartDrawer({
     <>
       {isOpen ? (
         <div
-          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm transition-opacity"
+          className="cart-drawer-backdrop"
           onClick={onClose}
         />
       ) : null}
@@ -404,47 +395,45 @@ export default function CartDrawer({
           paddingTop: 'env(safe-area-inset-top, 0.75rem)',
           paddingBottom: 'env(safe-area-inset-bottom, 0.85rem)',
         }}
-        className={`fixed right-0 top-0 z-50 flex h-full w-full max-w-[430px] transform flex-col rounded-l-[20px] border-l border-white/[0.05] bg-[#1A1715] shadow-[0_24px_60px_rgba(0,0,0,0.48)] transition-transform duration-300 ease-out ${
-          isOpen ? 'translate-x-0' : 'translate-x-full'
-        }`}
+        className={`cart-drawer ${isOpen ? 'is-open' : ''}`}
       >
-        <header className="flex flex-col gap-2 border-b border-white/[0.05] px-5 py-5">
-          <div className="flex items-start justify-between gap-2">
-            <h2 className="flex items-center gap-3 text-[24px] font-extrabold tracking-tight text-white">
-              <ShoppingBag size={25} className="text-[#FF8C2B]" />
+        <header className="cart-drawer-header">
+          <div className="cart-drawer-header-row">
+            <h2 className="cart-drawer-title">
+              <ShoppingBag size={25} className="cart-drawer-title-icon" />
               Your Order
             </h2>
             <button
               type="button"
               onClick={onClose}
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-[#FF8C2B]/40 text-[#D4C6B7] transition-all hover:bg-white/5 hover:text-white"
+              className="cart-drawer-close"
             >
               <X size={18} />
             </button>
           </div>
           {tableId ? (
-            <p className="text-xs font-semibold uppercase tracking-wider text-[#FFB76A]">
+            <p className="cart-drawer-table">
               ordering for table {tableId}
             </p>
           ) : null}
         </header>
 
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="cart-drawer-body">
+          <div className="cart-drawer-scroll">
             {billError ? (
-              <div className="mb-4 rounded-[16px] border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+              <div className="cart-drawer-alert cart-drawer-alert--error">
                 {billError}
               </div>
             ) : null}
 
             {statusMessage ? (
-              <div className="mb-4 rounded-[16px] border border-[#FF8C2B]/15 bg-[#201A16] px-4 py-3 text-sm text-[#E7D7C5]">
+              <div className="cart-drawer-alert cart-drawer-alert--status">
                 {statusMessage}
               </div>
             ) : null}
 
             {paymentMessage ? (
-              <div className="mb-4 rounded-[16px] border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+              <div className="cart-drawer-alert cart-drawer-alert--payment">
                 {paymentMessage}
               </div>
             ) : null}
@@ -462,25 +451,25 @@ export default function CartDrawer({
                   }}
                 />
 
-                <div className="mb-5 rounded-[20px] border border-white/[0.05] bg-[#201C19] p-4 shadow-[0_14px_28px_rgba(0,0,0,0.16)]">
-                  <div className="mb-3">
-                    <p className="text-lg font-bold text-white">Payment Options</p>
-                    <p className="mt-1 text-sm text-[#A79B8F]">
+                <div className="cart-payment-card">
+                  <div className="cart-payment-header">
+                    <p className="cart-payment-title">Payment Options</p>
+                    <p className="cart-payment-desc">
                       Your table is locked for billing now. Complete the selected payment flow and the admin will update the bill.
                     </p>
                   </div>
 
-                  <div className="space-y-3">
+                  <div className="cart-payment-options">
                     {restaurant?.paymentQrUrl ? (
-                      <div className="rounded-[16px] border border-white/[0.05] bg-[#181411] p-4">
-                        <div className="mb-3 flex items-center gap-2 text-white">
-                          <QrCode size={18} className="text-[#FF8C2B]" />
-                          <span className="font-semibold">Pay via QR Code</span>
+                      <div className="cart-payment-qr">
+                        <div className="cart-payment-qr-title">
+                          <QrCode size={18} className="cart-payment-qr-icon" />
+                          <span className="cart-payment-qr-label">Pay via QR Code</span>
                         </div>
                         <img
                           src={restaurant.paymentQrUrl}
                           alt="Restaurant payment QR"
-                          className="mx-auto h-40 w-40 rounded-[16px] bg-white object-contain p-2"
+                          className="cart-payment-qr-image"
                         />
                       </div>
                     ) : null}
@@ -489,18 +478,14 @@ export default function CartDrawer({
                       type="button"
                       onClick={openUpi}
                       disabled={!upiDeepLink}
-                      className={`flex h-[52px] w-full items-center justify-center gap-2 rounded-[16px] border text-[15px] font-semibold transition-all ${
-                        upiDeepLink
-                          ? 'border-white/[0.06] bg-[#171412] text-white hover:bg-white/[0.04]'
-                          : 'cursor-not-allowed border-white/[0.04] bg-[#171412] text-[#7B7168]'
-                      }`}
+                      className={`cart-payment-button ${upiDeepLink ? '' : 'is-disabled'}`}
                     >
                       <Wallet size={17} />
                       <span>{upiDeepLink ? 'Open UPI App' : 'UPI not configured yet'}</span>
                     </button>
 
-                    <div className="rounded-[16px] border border-white/[0.05] bg-[#171412] px-4 py-3 text-sm text-[#A79B8F]">
-                      Selected method: <span className="font-semibold text-white">{billPreview.paymentMethod || '-'}</span>
+                    <div className="cart-payment-selected">
+                      Selected method: <span className="cart-payment-selected-value">{billPreview.paymentMethod || '-'}</span>
                     </div>
                   </div>
                 </div>
@@ -508,21 +493,21 @@ export default function CartDrawer({
             ) : null}
 
             {!session ? (
-              <div className="rounded-[18px] border border-white/[0.04] bg-[#201C19] px-4 py-5 text-center text-sm text-[#A79B8F]">
+              <div className="cart-drawer-empty-session">
                 Start the table session on the menu page before placing orders.
               </div>
             ) : cart.length === 0 ? (
-              <div className="flex h-full flex-col items-center justify-center gap-4 text-center text-[#A1A1AA]">
-                <div className="flex h-20 w-20 items-center justify-center rounded-full border border-white/[0.05] bg-white/[0.03]">
-                  <ShoppingBag size={34} className="text-[#FF8C2B]" />
+              <div className="cart-drawer-empty">
+                <div className="cart-drawer-empty-icon">
+                  <ShoppingBag size={34} className="cart-drawer-empty-icon-svg" />
                 </div>
                 <div>
-                  <p className="text-lg font-semibold text-white">Your cart is empty</p>
-                  <p className="mt-1 text-sm">Add something delicious to get started.</p>
+                  <p className="cart-drawer-empty-title">Your cart is empty</p>
+                  <p className="cart-drawer-empty-subtitle">Add something delicious to get started.</p>
                 </div>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="cart-items">
                 {cart.map((item) => (
                   <CartItem
                     key={item._id}
@@ -537,35 +522,35 @@ export default function CartDrawer({
             )}
           </div>
 
-          <div className="sticky bottom-0 z-20 border-t border-white/[0.05] bg-[#201B18] px-5 pt-5 pb-[calc(1rem+env(safe-area-inset-bottom,0))] backdrop-blur-[1px]">
+          <div className="cart-drawer-footer">
             {cart.length > 0 ? (
               <>
-                <div className="mb-5">
-                  <label className="mb-2 block text-[13px] font-semibold uppercase tracking-[0.04em] text-[#9E9387]">
+                <div className="cart-customer">
+                  <label className="cart-customer-label">
                     Name (Optional)
                   </label>
-                  <div className="flex h-[50px] items-center gap-3 rounded-[12px] border border-white/[0.06] bg-[#1A1715] px-4">
-                    <UserRound size={16} className="text-[#756C63]" />
+                  <div className="cart-customer-input">
+                    <UserRound size={16} className="cart-customer-icon" />
                     <input
                       type="text"
                       value={customerName}
                       onChange={(event) => setCustomerName(event.target.value)}
                       placeholder="Enter your name"
-                      className="h-full w-full border-0 bg-transparent text-[15px] text-white outline-none placeholder:text-[#7E746B]"
+                      className="cart-customer-field"
                     />
                   </div>
                 </div>
 
-                <div className="mb-6 space-y-3 border-t border-white/[0.04] pt-5">
-                  <div className="flex items-center justify-between text-[15px] text-[#A79B8F]">
+                <div className="cart-summary">
+                  <div className="cart-summary-row">
                     <span>Subtotal</span>
-                    <span className="font-semibold text-[#E3DDD5]">
+                    <span className="cart-summary-value">
                       {RS}{cartTotal.toFixed(2)}
                     </span>
                   </div>
-                  <div className="flex items-end justify-between">
-                    <span className="text-[18px] font-bold text-white">Total</span>
-                    <span className="text-[20px] font-bold text-[#FF8C2B]">
+                  <div className="cart-summary-total">
+                    <span className="cart-summary-total-label">Total</span>
+                    <span className="cart-summary-total-value">
                       {RS}{cartTotal.toFixed(2)}
                     </span>
                   </div>
@@ -573,40 +558,32 @@ export default function CartDrawer({
               </>
             ) : null}
 
-            <div className="space-y-3">
+            <div className="cart-action-stack">
               {cart.length > 0 ? (
-              <button
-                type="button"
-                onClick={handleCheckout}
-                disabled={isSubmitting || hasLockedOrderState}
-                className={`flex h-[56px] w-full items-center justify-center gap-2 rounded-[16px] text-[18px] font-bold text-white transition-all duration-300 ${
-                  isSubmitting || hasLockedOrderState
-                    ? 'cursor-not-allowed bg-[#6E6258] opacity-70 shadow-none'
-                    : 'bg-[linear-gradient(135deg,#FF8C2B,#FF5E00)] shadow-[0_18px_40px_rgba(255,110,10,0.28)] hover:-translate-y-0.5 hover:shadow-[0_22px_48px_rgba(255,110,10,0.34)]'
-                }`}
-              >
-                <span>
-                  {isSubmitting
-                    ? 'Placing Order...'
-                    : hasLockedOrderState
-                      ? 'Ordering Locked'
-                      : 'Place Order'}
-                </span>
-                {!isSubmitting && !hasLockedOrderState ? <ArrowRight size={18} /> : null}
-              </button>
-            ) : null}
+                <button
+                  type="button"
+                  onClick={handleCheckout}
+                  disabled={isSubmitting || hasLockedOrderState}
+                  className={`cart-checkout-button ${isSubmitting || hasLockedOrderState ? 'is-disabled' : ''}`}
+                >
+                  <span>
+                    {isSubmitting
+                      ? 'Placing Order...'
+                      : hasLockedOrderState
+                        ? 'Ordering Locked'
+                        : 'Place Order'}
+                  </span>
+                  {!isSubmitting && !hasLockedOrderState ? <ArrowRight size={18} /> : null}
+                </button>
+              ) : null}
 
               {!billPreview ? (
-                <div className="grid gap-2">
+                <div className="cart-bill-group">
                   <button
                     type="button"
                     onClick={billReady ? () => handleSelectPaymentMethod('QR') : handleGenerateBill}
                     disabled={isBillLoading || !session?._id}
-                    className={`flex h-[52px] w-full items-center justify-center gap-2 rounded-[16px] border border-white/[0.06] text-[16px] font-semibold transition-all duration-300 ${
-                      isBillLoading || !session?._id
-                        ? 'cursor-not-allowed bg-[#171412] text-[#7E746B]'
-                        : 'bg-[#171412] text-white hover:bg-white/[0.04]'
-                    }`}
+                    className={`cart-bill-button ${isBillLoading || !session?._id ? 'is-disabled' : ''}`}
                   >
                     {billReady ? <QrCode size={17} /> : <FileText size={17} />}
                     <span>
@@ -623,11 +600,7 @@ export default function CartDrawer({
                         type="button"
                         onClick={() => handleSelectPaymentMethod('UPI')}
                         disabled={isBillLoading || !session?._id}
-                        className={`flex h-[52px] w-full items-center justify-center gap-2 rounded-[16px] border border-white/[0.06] text-[16px] font-semibold transition-all duration-300 ${
-                          isBillLoading || !session?._id
-                            ? 'cursor-not-allowed bg-[#171412] text-[#7E746B]'
-                            : 'bg-[#171412] text-white hover:bg-white/[0.04]'
-                        }`}
+                        className={`cart-bill-button ${isBillLoading || !session?._id ? 'is-disabled' : ''}`}
                       >
                         <Wallet size={17} />
                         <span>{isBillLoading && selectedPaymentMethod === 'UPI' ? 'Preparing Bill...' : 'Pay via UPI'}</span>
@@ -636,11 +609,7 @@ export default function CartDrawer({
                         type="button"
                         onClick={() => handleSelectPaymentMethod('CASH')}
                         disabled={isBillLoading || !session?._id}
-                        className={`flex h-[52px] w-full items-center justify-center gap-2 rounded-[16px] text-[16px] font-semibold text-white transition-all duration-300 ${
-                          isBillLoading || !session?._id
-                            ? 'cursor-not-allowed bg-[#6E6258] opacity-70 shadow-none'
-                            : 'bg-[linear-gradient(135deg,#FF8C2B,#FF5E00)] shadow-[0_18px_40px_rgba(255,110,10,0.28)] hover:-translate-y-0.5'
-                        }`}
+                        className={`cart-bill-button cart-bill-button--primary ${isBillLoading || !session?._id ? 'is-disabled' : ''}`}
                       >
                         <FileText size={17} />
                         <span>{isBillLoading && selectedPaymentMethod === 'CASH' ? 'Preparing Bill...' : 'Pay with Cash'}</span>
