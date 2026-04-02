@@ -1,64 +1,69 @@
 import { useCart } from '../context/CartContext';
-import { Clock3, ShoppingBag, UtensilsCrossed } from 'lucide-react';
+import { UtensilsCrossed } from 'lucide-react';
+import './MenuItemCard.css';
 
 const RS = '\u20B9';
 
-export default function MenuItemCard({ item, disabled = false, disabledLabel = 'Add to Order' }) {
+export default function MenuItemCard({ item, disabled = false, disabledLabel = 'Add to Cart' }) {
   const { addToCart } = useCart();
+  const isVeg = item.isVeg !== false;
+  const badgeToneClass = isVeg ? 'is-veg' : 'is-non-veg';
+  const priceLabel = Number(item.price || 0).toLocaleString('en-IN');
 
   return (
-    <article className="group mx-auto flex h-[492px] w-full max-w-[392px] flex-col overflow-hidden rounded-[28px] border border-white/[0.04] bg-[#221D19] p-6 shadow-[0_18px_40px_rgba(0,0,0,0.18)] transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_24px_54px_rgba(0,0,0,0.26)]">
-      <div className="relative mb-6 h-[260px] overflow-hidden rounded-[24px] bg-[#302A24]">
+    <article className="menu-item-card">
+      <div className="menu-item-media">
         {item.image ? (
           <img
             src={item.image}
             alt={item.name}
-            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+            className="menu-item-image"
           />
         ) : (
           <>
-            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.01),rgba(0,0,0,0.10))]" />
-            <div className="relative flex h-full items-center justify-center">
-              <div className="flex h-24 w-24 items-center justify-center rounded-full bg-black/5">
-                <UtensilsCrossed size={44} className="text-[#534B43]" strokeWidth={1.7} />
+            <div className="menu-item-placeholder">
+              <div className="menu-item-placeholder-icon">
+                <UtensilsCrossed size={34} className="menu-item-placeholder-icon-svg" strokeWidth={1.6} />
               </div>
             </div>
           </>
         )}
 
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.00)_0%,rgba(0,0,0,0.18)_100%)]" />
+        <div className="menu-item-media-overlay" />
 
-        <div className="absolute bottom-4 right-4 inline-flex h-[34px] items-center gap-1.5 whitespace-nowrap rounded-full bg-[#181411] px-3.5 text-[13px] font-semibold leading-none text-white shadow-[0_8px_18px_rgba(0,0,0,0.18)]">
-          <Clock3 size={13} />
-          <span className="leading-none">{item.prepTime || '15 min'}</span>
+        <div className="menu-item-badge-wrap">
+          <span className={`menu-item-badge ${badgeToneClass}`} />
         </div>
+
+        {item.isPopular ? (
+          <div className="menu-item-special">
+            Chef&apos;s Special
+          </div>
+        ) : null}
       </div>
 
-      <div className="flex flex-1 flex-col">
-        <div className="flex items-start justify-between gap-4">
-          <h3 className="text-[20px] font-bold leading-[1.2] text-white">{item.name}</h3>
-          <span className="whitespace-nowrap pt-0.5 text-[18px] font-semibold leading-none text-[#FF8C2B]">
+      <div className="menu-item-body">
+        <div className="menu-item-header">
+          <h3 className="menu-display menu-item-title">
+            {item.name}
+          </h3>
+          <span className="menu-display menu-item-price">
             {RS}
-            {Number(item.price || 0).toFixed(2)}
+            {priceLabel}
           </span>
         </div>
 
-        <p className="mt-3 line-clamp-2 min-h-[46px] text-[14px] leading-[1.6] text-white/70">
-          {item.description || 'Freshly prepared with premium ingredients and balanced flavors.'}
+        <p className="menu-item-description">
+          {item.description || 'A signature dish crafted with rich flavors and seasonal ingredients.'}
         </p>
 
         <button
           type="button"
           onClick={() => addToCart(item)}
           disabled={disabled}
-          className={`mt-auto flex h-[48px] w-full items-center justify-center gap-2 rounded-[20px] px-5 font-semibold text-white shadow-[0_12px_26px_rgba(255,140,43,0.22)] transition-all duration-300 ${
-            disabled
-              ? 'cursor-not-allowed bg-[#6E6258] opacity-70 shadow-none'
-              : 'bg-[#FF8C2B] hover:translate-y-[-1px] hover:scale-[1.01] hover:brightness-105'
-          }`}
+          className={`menu-item-button ${disabled ? 'is-disabled' : ''}`}
         >
-          <ShoppingBag size={16} />
-          <span>{disabled ? disabledLabel : 'Add to Order'}</span>
+          <span>{disabled ? disabledLabel : 'Add to Cart'}</span>
         </button>
       </div>
     </article>

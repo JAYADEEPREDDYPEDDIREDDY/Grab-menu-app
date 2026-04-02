@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 
 import Menu from './pages/customer/Menu';
+import GrabMenu from './pages/customer/Menu';
 import OrderTracking from './pages/customer/OrderTracking';
 
 import AdminLogin from './pages/admin/AdminLogin';
@@ -37,7 +38,7 @@ function App() {
     <Router>
       <AuthProvider>
         <CartProvider>
-          <div className="min-h-screen relative overflow-hidden text-[hsl(var(--hue,250),10%,95%)] bg-[hsl(var(--hue,250),20%,8%)]">
+          <div className="min-h-screen relative overflow-x-hidden text-[hsl(var(--hue,250),10%,95%)] bg-[hsl(var(--hue,250),20%,8%)]">
             <div className="bg-glow blob-1 fixed w-[400px] h-[400px] rounded-full blur-[100px] bg-accent/30 top-[-100px] left-[-100px] z-0 animate-[pulseGlow_8s_infinite_alternate_ease-in-out]" />
             <div className="bg-glow blob-2 fixed w-[300px] h-[300px] rounded-full blur-[100px] bg-[hsla(280,80%,60%,0.2)] bottom-[-50px] right-[-50px] z-0 animate-[pulseGlow_8s_infinite_alternate_ease-in-out] [animation-delay:-4s]" />
 
