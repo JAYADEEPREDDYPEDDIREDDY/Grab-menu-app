@@ -1,15 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useCart } from '../context/CartContext';
 import {
   ArrowRight,
-  FileText,
   Minus,
   Plus,
-  QrCode,
   ShoppingBag,
   Trash2,
   UserRound,
-  Wallet,
   X,
 } from 'lucide-react';
 import { getApiUrl } from '../config/api';
@@ -83,96 +80,23 @@ function CartItem({ item, onDecrease, onIncrease, onRemove, disabled = false }) 
   );
 }
 
-function BillPreview({ bill, tableId, restaurantName, onClose }) {
-  return (
-    <div className="bill-preview">
-      <div className="bill-preview-header">
-        <div>
-          <p className="bill-preview-title">{restaurantName || 'Table Bill'}</p>
-          <p className="bill-preview-table">
-            table {tableId}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="bill-preview-close"
-        >
-          Close
-        </button>
-      </div>
-
-      <div className="bill-preview-items">
-        {(bill.lineItems || []).map((item, index) => (
-          <div key={`${item.name}-${index}`} className="bill-preview-item">
-            <div className="bill-preview-item-info">
-              <p className="bill-preview-item-name">{item.name}</p>
-              <p className="bill-preview-item-meta">
-                {item.quantity} x {RS}
-                {Number(item.unitPrice || 0).toFixed(2)}
-              </p>
-            </div>
-            <p className="bill-preview-item-total">
-              {RS}
-              {Number(item.totalPrice || 0).toFixed(2)}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      <div className="bill-preview-summary">
-        <div className="bill-preview-summary-row">
-          <span>Subtotal</span>
-          <span>{RS}{Number(bill.subtotal || 0).toFixed(2)}</span>
-        </div>
-        <div className="bill-preview-summary-row">
-          <span>GST ({bill.gstRate || 0}%)</span>
-          <span>{RS}{Number(bill.gstAmount || 0).toFixed(2)}</span>
-        </div>
-        <div className="bill-preview-summary-row">
-          <span>Service ({bill.serviceChargeRate || 0}%)</span>
-          <span>{RS}{Number(bill.serviceChargeAmount || 0).toFixed(2)}</span>
-        </div>
-        <div className="bill-preview-summary-row bill-preview-summary-total">
-          <span className="bill-preview-summary-total-label">Total</span>
-          <span className="bill-preview-summary-total-value">
-            {RS}{Number(bill.totalAmount || 0).toFixed(2)}
-          </span>
-        </div>
-        <div className="bill-preview-summary-row">
-          <span>Payment Status</span>
-          <span>{bill.paymentStatusLabel || bill.paymentStatus}</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function CartDrawer({
   isOpen,
   onClose,
   restaurantId,
-  restaurant,
   tableId,
   session,
   sessionToken,
   orderingDisabled,
   onSessionUpdate,
   onStartSession,
-  personsInput,
 }) {
   const { cart, cartTotal, updateQuantity, removeFromCart, clearCart } = useCart();
   const [customerName, setCustomerName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isBillLoading, setIsBillLoading] = useState(false);
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('');
-  const [billReady, setBillReady] = useState(false);
   const [billError, setBillError] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
-  const [paymentMessage, setPaymentMessage] = useState('');
-  const [billPreview, setBillPreview] = useState(null);
-  const hasLockedOrderState =
-    Boolean(orderingDisabled) && (Boolean(session?._id) || Boolean(billPreview));
+  const hasLockedOrderState = Boolean(orderingDisabled) && Boolean(session?._id);
   const lastSyncedPayloadRef = useRef('');
 
   useEffect(() => {
@@ -228,23 +152,6 @@ export default function CartDrawer({
     };
   }, [cart, customerName, session?._id, session?.isActive, sessionToken]);
 
-  const upiDeepLink = useMemo(() => {
-    if (!restaurant?.upiId || !billPreview?.totalAmount) {
-      return '';
-    }
-
-    const amount = Number(billPreview.totalAmount || 0).toFixed(2);
-    const params = new URLSearchParams({
-      pa: restaurant.upiId,
-      pn: restaurant.name || 'Restaurant',
-      am: amount,
-      cu: 'INR',
-      tn: `Table ${tableId} Bill`,
-    });
-
-    return `upi://pay?${params.toString()}`;
-  }, [billPreview?.totalAmount, restaurant?.name, restaurant?.upiId, tableId]);
-
   const handleCheckout = async () => {
     if (!tableId || !restaurantId || !sessionToken) {
       setBillError('Table session missing. Please refresh and try again.');
@@ -292,6 +199,7 @@ export default function CartDrawer({
       }
 
       clearCart();
+      onSessionUpdate?.(activeSession);
       setStatusMessage(`Order placed successfully for Table ${tableId}. You can continue ordering anytime.`);
       onClose();
     } catch (error) {
@@ -300,85 +208,6 @@ export default function CartDrawer({
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const handleSelectPaymentMethod = async (paymentMethod) => {
-    if (!tableId || !restaurantId || !session?._id || !sessionToken) {
-      setBillError('Table session missing. Please refresh and start the session again.');
-      return;
-    }
-
-    if (cart.length > 0) {
-      setBillError('Place or clear the current cart items before generating the bill.');
-      return;
-    }
-
-    try {
-      setIsBillLoading(true);
-      setSelectedPaymentMethod(paymentMethod);
-      setBillError('');
-      setPaymentMessage('');
-      const response = await fetch(getApiUrl('/api/payment/select-method'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tableId,
-          restaurantId,
-          sessionId: session._id,
-          sessionToken,
-          paymentMethod,
-        }),
-      });
-
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to create bill');
-      }
-
-      setBillPreview(data);
-      onSessionUpdate?.({ ...session, status: 'BILLING', isLocked: true });
-
-      if (paymentMethod === 'CASH') {
-        setPaymentMessage('Cash payment requested. The staff will approve the bill once payment is collected.');
-      } else if (paymentMethod === 'QR') {
-        setPaymentMessage('QR payment selected. Scan the restaurant QR and ask staff to mark the bill as paid.');
-      } else {
-        setPaymentMessage('UPI payment selected. Complete the transfer and ask staff to mark the bill as paid.');
-      }
-    } catch (error) {
-      console.error(error);
-      setBillError(error.message || 'Failed to generate bill');
-    } finally {
-      setIsBillLoading(false);
-      setSelectedPaymentMethod('');
-    }
-  };
-
-  const handleGenerateBill = async () => {
-    if (!tableId || !restaurantId || !session?._id || !sessionToken) {
-      setBillError('Table session missing. Please refresh and start the session again.');
-      return;
-    }
-
-    if (cart.length > 0) {
-      setBillError('Place or clear the current cart items before generating the bill.');
-      return;
-    }
-
-    setBillError('');
-    setPaymentMessage('');
-    setBillReady(true);
-    setStatusMessage('Bill generated. Choose a payment option to continue.');
-  };
-
-  const openUpi = () => {
-    if (!upiDeepLink) {
-      setBillError('UPI ID is not configured for this restaurant yet.');
-      return;
-    }
-
-    window.location.href = upiDeepLink;
-    setPaymentMessage('UPI app opened. Complete the payment and ask staff to mark the bill as paid.');
   };
 
   return (
@@ -432,69 +261,9 @@ export default function CartDrawer({
               </div>
             ) : null}
 
-            {paymentMessage ? (
-              <div className="cart-drawer-alert cart-drawer-alert--payment">
-                {paymentMessage}
-              </div>
-            ) : null}
-
-            {billPreview ? (
-              <>
-                <BillPreview
-                  bill={billPreview}
-                  tableId={tableId}
-                  restaurantName={restaurant?.name}
-                  onClose={() => {
-                    setBillPreview(null);
-                    setBillReady(false);
-                    setPaymentMessage('');
-                  }}
-                />
-
-                <div className="cart-payment-card">
-                  <div className="cart-payment-header">
-                    <p className="cart-payment-title">Payment Options</p>
-                    <p className="cart-payment-desc">
-                      Your table is locked for billing now. Complete the selected payment flow and the admin will update the bill.
-                    </p>
-                  </div>
-
-                  <div className="cart-payment-options">
-                    {restaurant?.paymentQrUrl ? (
-                      <div className="cart-payment-qr">
-                        <div className="cart-payment-qr-title">
-                          <QrCode size={18} className="cart-payment-qr-icon" />
-                          <span className="cart-payment-qr-label">Pay via QR Code</span>
-                        </div>
-                        <img
-                          src={restaurant.paymentQrUrl}
-                          alt="Restaurant payment QR"
-                          className="cart-payment-qr-image"
-                        />
-                      </div>
-                    ) : null}
-
-                    <button
-                      type="button"
-                      onClick={openUpi}
-                      disabled={!upiDeepLink}
-                      className={`cart-payment-button ${upiDeepLink ? '' : 'is-disabled'}`}
-                    >
-                      <Wallet size={17} />
-                      <span>{upiDeepLink ? 'Open UPI App' : 'UPI not configured yet'}</span>
-                    </button>
-
-                    <div className="cart-payment-selected">
-                      Selected method: <span className="cart-payment-selected-value">{billPreview.paymentMethod || '-'}</span>
-                    </div>
-                  </div>
-                </div>
-              </>
-            ) : null}
-
             {!session ? (
               <div className="cart-drawer-empty-session">
-                Start the table session on the menu page before placing orders.
+                Add items and place your order. The table session will start automatically.
               </div>
             ) : cart.length === 0 ? (
               <div className="cart-drawer-empty">
@@ -575,48 +344,6 @@ export default function CartDrawer({
                   </span>
                   {!isSubmitting && !hasLockedOrderState ? <ArrowRight size={18} /> : null}
                 </button>
-              ) : null}
-
-              {!billPreview ? (
-                <div className="cart-bill-group">
-                  <button
-                    type="button"
-                    onClick={billReady ? () => handleSelectPaymentMethod('QR') : handleGenerateBill}
-                    disabled={isBillLoading || !session?._id}
-                    className={`cart-bill-button ${isBillLoading || !session?._id ? 'is-disabled' : ''}`}
-                  >
-                    {billReady ? <QrCode size={17} /> : <FileText size={17} />}
-                    <span>
-                      {!billReady
-                        ? 'Generate Bill'
-                        : isBillLoading && selectedPaymentMethod === 'QR'
-                          ? 'Preparing Bill...'
-                          : 'Pay via QR Code'}
-                    </span>
-                  </button>
-                  {billReady ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => handleSelectPaymentMethod('UPI')}
-                        disabled={isBillLoading || !session?._id}
-                        className={`cart-bill-button ${isBillLoading || !session?._id ? 'is-disabled' : ''}`}
-                      >
-                        <Wallet size={17} />
-                        <span>{isBillLoading && selectedPaymentMethod === 'UPI' ? 'Preparing Bill...' : 'Pay via UPI'}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSelectPaymentMethod('CASH')}
-                        disabled={isBillLoading || !session?._id}
-                        className={`cart-bill-button cart-bill-button--primary ${isBillLoading || !session?._id ? 'is-disabled' : ''}`}
-                      >
-                        <FileText size={17} />
-                        <span>{isBillLoading && selectedPaymentMethod === 'CASH' ? 'Preparing Bill...' : 'Pay with Cash'}</span>
-                      </button>
-                    </>
-                  ) : null}
-                </div>
               ) : null}
             </div>
           </div>
