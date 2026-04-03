@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { io } from "socket.io-client";
-import { FileText, QrCode, Wallet } from "lucide-react";
+import {
+  FileText,
+  QrCode,
+  Wallet,
+  Search,
+} from "lucide-react";
 import { useCart } from "../../context/CartContext";
 import MenuItemCard from "../../components/MenuItemCard";
 import CartDrawer from "../../components/CartDrawer";
@@ -49,6 +54,7 @@ export default function Menu() {
   const [restaurant, setRestaurant] = useState(null);
   const [customerNotice, setCustomerNotice] = useState("");
   const [customerError, setCustomerError] = useState("");
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [tableLocked, setTableLocked] = useState(false);
   const [activeBill, setActiveBill] = useState(null);
   const [billReady, setBillReady] = useState(false);
@@ -81,6 +87,10 @@ export default function Menu() {
   const tableLabel = Number.isFinite(parsedTableNumber)
     ? `Table #${parsedTableNumber}`
     : "Table";
+  const mobileTableLabel = Number.isFinite(parsedTableNumber)
+    ? `T-${parsedTableNumber}`
+    : tableLabel;
+  const missingTableContext = !tableId || !restaurantId;
 
   const orderingDisabled =
     tableLocked || (Boolean(session?._id) && (!session?.isActive || session?.status !== "ACTIVE"));
@@ -178,7 +188,7 @@ export default function Menu() {
       if (response.status === 423) {
         setSession(null);
         setOrders([]);
-        setRestaurant(null);
+        setRestaurant(data.restaurant || null);
         setTableLocked(true);
         setCustomerNotice(data.message || "This table already has an active session.");
         return;
@@ -480,16 +490,270 @@ export default function Menu() {
     }
   };
 
-  const missingTableContext = !tableId || !restaurantId;
+  const liveOrdersContent = (
+    <>
+      <div className="menu-panel-header">
+        <div>
+          <p className="menu-panel-kicker">Live Orders</p>
+          <h3 className="menu-display menu-panel-title">Order Status</h3>
+        </div>
+        <span className="menu-panel-pill is-neutral">
+          {sessionLoading ? "Loading" : `${orders.length} total`}
+        </span>
+      </div>
+
+      {sessionLoading ? (
+        <div className="menu-orders-empty">Loading your table activity...</div>
+      ) : missingTableContext ? (
+        <div className="menu-orders-empty">
+          Open this page with both `table` and `restaurant` in the URL to start ordering.
+        </div>
+      ) : customerError ? (
+        <div className="menu-orders-empty">{customerError}</div>
+      ) : customerNotice && !session ? (
+        <div className="menu-orders-empty">{customerNotice}</div>
+      ) : !session ? (
+        <div className="menu-orders-empty">
+          Place your first order to start the session automatically and track updates here.
+        </div>
+      ) : orders.length === 0 ? (
+        <div className="menu-orders-empty">
+          No orders yet. Add items to the cart and place your first order.
+        </div>
+      ) : (
+        <div className="menu-orders-list">
+          {orders.slice(0, 5).map((order) => (
+            <div key={order._id} className="menu-order-card">
+              <div className="menu-order-top">
+                <div>
+                  <p className="menu-order-id">Order #{order._id.slice(-6).toUpperCase()}</p>
+                  <p className="menu-order-time">
+                    {new Date(order.createdAt).toLocaleString("en-IN", {
+                      day: "2-digit",
+                      month: "short",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                </div>
+                <span className={`menu-order-status ${getOrderStatusTone(order.status)}`}>
+                  {order.status}
+                </span>
+              </div>
+
+              <div className="menu-order-items">
+                {(order.items || []).slice(0, 3).map((item, index) => (
+                  <p key={`${order._id}-${index}`} className="menu-order-item">
+                    {item.quantity}x {item.menuItemId?.name || "Menu item"}
+                  </p>
+                ))}
+              </div>
+
+              <div className="menu-order-total">
+                <span>Total</span>
+                <strong>
+                  {RS}
+                  {Number(order.totalPrice || 0).toFixed(2)}
+                </strong>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+
+  const billingActions = (
+    <div className="menu-billing-actions">
+      {!billReady ? (
+        <button
+          type="button"
+          onClick={handleGenerateBill}
+          disabled={billActionLoading || sessionLoading || missingTableContext}
+          className={`menu-primary-button ${
+            billActionLoading || sessionLoading || missingTableContext ? "is-disabled" : ""
+          }`}
+        >
+          <FileText size={17} />
+          <span>Generate Bill</span>
+        </button>
+      ) : (
+        <>
+          <button
+            type="button"
+            onClick={() => handleSelectPaymentMethod("QR")}
+            disabled={billActionLoading}
+            className={`menu-billing-method-button ${billActionLoading ? "is-disabled" : ""}`}
+          >
+            <QrCode size={17} />
+            <span>
+              {billActionLoading && selectedPaymentMethod === "QR"
+                ? "Preparing..."
+                : "Pay via QR"}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSelectPaymentMethod("UPI")}
+            disabled={billActionLoading}
+            className={`menu-billing-method-button ${billActionLoading ? "is-disabled" : ""}`}
+          >
+            <Wallet size={17} />
+            <span>
+              {billActionLoading && selectedPaymentMethod === "UPI"
+                ? "Preparing..."
+                : "Pay via UPI"}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSelectPaymentMethod("CASH")}
+            disabled={billActionLoading}
+            className={`menu-billing-method-button is-primary ${billActionLoading ? "is-disabled" : ""}`}
+          >
+            <FileText size={17} />
+            <span>
+              {billActionLoading && selectedPaymentMethod === "CASH"
+                ? "Preparing..."
+                : "Pay with Cash"}
+            </span>
+          </button>
+        </>
+      )}
+    </div>
+  );
+
+  const billingContent = (
+    <>
+      <div className="menu-panel-header">
+        <div>
+          <p className="menu-panel-kicker">Billing</p>
+          <h3 className="menu-display menu-panel-title">Bill & Payment</h3>
+        </div>
+        <span className="menu-panel-pill is-neutral">
+          {activeBill?.paymentStatus || session?.paymentRequest?.status || "Idle"}
+        </span>
+      </div>
+
+      {billingError ? <p className="menu-inline-error">{billingError}</p> : null}
+      {billingMessage ? <p className="menu-inline-note">{billingMessage}</p> : null}
+      {!billingMessage && customerNotice && session ? (
+        <p className="menu-inline-note">{customerNotice}</p>
+      ) : null}
+
+      {activeBill ? (
+        <>
+          <div className="menu-bill-preview">
+            <div className="menu-detail-row">
+              <span>Completed items</span>
+              <span>
+                {RS}
+                {completedOrdersTotal.toFixed(2)}
+              </span>
+            </div>
+            <div className="menu-detail-row">
+              <span>Subtotal</span>
+              <span>{RS}{Number(activeBill.subtotal || 0).toFixed(2)}</span>
+            </div>
+            <div className="menu-detail-row">
+              <span>GST</span>
+              <span>{RS}{Number(activeBill.gstAmount || 0).toFixed(2)}</span>
+            </div>
+            <div className="menu-detail-row">
+              <span>Service</span>
+              <span>{RS}{Number(activeBill.serviceChargeAmount || 0).toFixed(2)}</span>
+            </div>
+            <div className="menu-detail-row menu-detail-row-total">
+              <span>Total</span>
+              <span>{RS}{Number(activeBill.totalAmount || 0).toFixed(2)}</span>
+            </div>
+            <div className="menu-detail-row">
+              <span>Method</span>
+              <span>{activeBill.paymentMethod || "Not selected"}</span>
+            </div>
+          </div>
+
+          {activeBill.paymentMethod === "UPI" && restaurant?.upiId ? (
+            <a
+              href={`upi://pay?${new URLSearchParams({
+                pa: restaurant.upiId,
+                pn: restaurant.name || "Restaurant",
+                am: Number(activeBill.totalAmount || 0).toFixed(2),
+                cu: "INR",
+                tn: `Table ${tableId} Bill`,
+              }).toString()}`}
+              className="menu-primary-button menu-billing-link"
+            >
+              Open UPI App
+            </a>
+          ) : null}
+
+          {activeBill.paymentMethod === "QR" && restaurant?.paymentQrUrl ? (
+            <div className="menu-payment-qr-card">
+              <img
+                src={restaurant.paymentQrUrl}
+                alt="Restaurant payment QR"
+                className="menu-payment-qr-image"
+              />
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <>
+          <div className="menu-orders-empty">
+            Generate the bill here once all current cart items are placed. Payment updates
+            will appear here in real time.
+          </div>
+          {billingActions}
+        </>
+      )}
+    </>
+  );
 
   return (
     <div className="menu-page">
       <div className="menu-ambient-glow" />
 
       <header className="menu-header">
-        <div className={`${container} menu-header-inner`}>
+        <div className="menu-header-mobile menu-mobile-only">
+          <div className="menu-header-mobile-row">
+            <div className="menu-brand">
+              <span className="menu-brand-icon">x</span>
+              <span className="menu-brand-text">
+                {restaurant?.name || "Grab Menu"}
+              </span>
+            </div>
+            <div className="menu-header-mobile-actions">
+              <button
+                type="button"
+                className="menu-icon-button"
+                onClick={() => setMobileSearchOpen((prev) => !prev)}
+                aria-label="Search"
+              >
+                <Search size={18} />
+              </button>
+              <span className="menu-table-badge menu-table-badge--mobile">
+                {mobileTableLabel}
+              </span>
+            </div>
+          </div>
+
+          {mobileSearchOpen ? (
+            <div className="menu-mobile-search">
+              <SearchBar
+                value={searchQuery}
+                onChange={setSearchQuery}
+                className="menu-search menu-search--mobile"
+              />
+            </div>
+          ) : null}
+        </div>
+
+        <div className={`${container} menu-header-inner menu-desktop-only`}>
           <div className="menu-header-left">
-            <h1 className="menu-display menu-title">Grab Menu</h1>
+            <h1 className="menu-display menu-title">
+              {restaurant?.name || "Grab Menu"}
+            </h1>
           </div>
 
           <div className="menu-search-wrap">
@@ -503,6 +767,16 @@ export default function Menu() {
       </header>
 
       <main className={`${container} menu-main`}>
+        {customerError ? (
+          <div className="menu-mobile-alert menu-mobile-only is-error">
+            {customerError}
+          </div>
+        ) : customerNotice ? (
+          <div className="menu-mobile-alert menu-mobile-only">
+            {customerNotice}
+          </div>
+        ) : null}
+
         <section className="menu-hero">
           {heroImage ? (
             <img src={heroImage} alt="Featured dish" className="menu-hero-image" />
@@ -520,218 +794,8 @@ export default function Menu() {
         </section>
 
         <section className="menu-status-grid">
-          <article className="menu-panel">
-            <div className="menu-panel-header">
-              <div>
-                <p className="menu-panel-kicker">Live Orders</p>
-                <h3 className="menu-display menu-panel-title">Order Status</h3>
-              </div>
-              <span className="menu-panel-pill is-neutral">
-                {sessionLoading ? "Loading" : `${orders.length} total`}
-              </span>
-            </div>
-
-            {sessionLoading ? (
-              <div className="menu-orders-empty">Loading your table activity...</div>
-            ) : missingTableContext ? (
-              <div className="menu-orders-empty">
-                Open this page with both `table` and `restaurant` in the URL to start ordering.
-              </div>
-            ) : customerError ? (
-              <div className="menu-orders-empty">{customerError}</div>
-            ) : customerNotice && !session ? (
-              <div className="menu-orders-empty">{customerNotice}</div>
-            ) : !session ? (
-              <div className="menu-orders-empty">
-                Place your first order to start the session automatically and track updates here.
-              </div>
-            ) : orders.length === 0 ? (
-              <div className="menu-orders-empty">
-                No orders yet. Add items to the cart and place your first order.
-              </div>
-            ) : (
-              <div className="menu-orders-list">
-                {orders.slice(0, 5).map((order) => (
-                  <div key={order._id} className="menu-order-card">
-                    <div className="menu-order-top">
-                      <div>
-                        <p className="menu-order-id">Order #{order._id.slice(-6).toUpperCase()}</p>
-                        <p className="menu-order-time">
-                          {new Date(order.createdAt).toLocaleString("en-IN", {
-                            day: "2-digit",
-                            month: "short",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </p>
-                      </div>
-                      <span className={`menu-order-status ${getOrderStatusTone(order.status)}`}>
-                        {order.status}
-                      </span>
-                    </div>
-
-                    <div className="menu-order-items">
-                      {(order.items || []).slice(0, 3).map((item, index) => (
-                        <p key={`${order._id}-${index}`} className="menu-order-item">
-                          {item.quantity}x {item.menuItemId?.name || "Menu item"}
-                        </p>
-                      ))}
-                    </div>
-
-                    <div className="menu-order-total">
-                      <span>Total</span>
-                      <strong>
-                        {RS}
-                        {Number(order.totalPrice || 0).toFixed(2)}
-                      </strong>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </article>
-
-          <article className="menu-panel">
-            <div className="menu-panel-header">
-              <div>
-                <p className="menu-panel-kicker">Billing</p>
-                <h3 className="menu-display menu-panel-title">Bill & Payment</h3>
-              </div>
-              <span className="menu-panel-pill is-neutral">
-                {activeBill?.paymentStatus || session?.paymentRequest?.status || "Idle"}
-              </span>
-            </div>
-
-            {billingError ? <p className="menu-inline-error">{billingError}</p> : null}
-            {billingMessage ? <p className="menu-inline-note">{billingMessage}</p> : null}
-            {!billingMessage && customerNotice && session ? (
-              <p className="menu-inline-note">{customerNotice}</p>
-            ) : null}
-
-            {activeBill ? (
-              <>
-                <div className="menu-bill-preview">
-                  <div className="menu-detail-row">
-                    <span>Completed items</span>
-                    <span>
-                      {RS}
-                      {completedOrdersTotal.toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="menu-detail-row">
-                    <span>Subtotal</span>
-                    <span>{RS}{Number(activeBill.subtotal || 0).toFixed(2)}</span>
-                  </div>
-                  <div className="menu-detail-row">
-                    <span>GST</span>
-                    <span>{RS}{Number(activeBill.gstAmount || 0).toFixed(2)}</span>
-                  </div>
-                  <div className="menu-detail-row">
-                    <span>Service</span>
-                    <span>{RS}{Number(activeBill.serviceChargeAmount || 0).toFixed(2)}</span>
-                  </div>
-                  <div className="menu-detail-row menu-detail-row-total">
-                    <span>Total</span>
-                    <span>{RS}{Number(activeBill.totalAmount || 0).toFixed(2)}</span>
-                  </div>
-                  <div className="menu-detail-row">
-                    <span>Method</span>
-                    <span>{activeBill.paymentMethod || "Not selected"}</span>
-                  </div>
-                </div>
-
-                {activeBill.paymentMethod === "UPI" && restaurant?.upiId ? (
-                  <a
-                    href={`upi://pay?${new URLSearchParams({
-                      pa: restaurant.upiId,
-                      pn: restaurant.name || "Restaurant",
-                      am: Number(activeBill.totalAmount || 0).toFixed(2),
-                      cu: "INR",
-                      tn: `Table ${tableId} Bill`,
-                    }).toString()}`}
-                    className="menu-primary-button menu-billing-link"
-                  >
-                    Open UPI App
-                  </a>
-                ) : null}
-
-                {activeBill.paymentMethod === "QR" && restaurant?.paymentQrUrl ? (
-                  <div className="menu-payment-qr-card">
-                    <img
-                      src={restaurant.paymentQrUrl}
-                      alt="Restaurant payment QR"
-                      className="menu-payment-qr-image"
-                    />
-                  </div>
-                ) : null}
-              </>
-            ) : (
-              <>
-                <div className="menu-orders-empty">
-                  Generate the bill here once all current cart items are placed. Payment updates
-                  will appear here in real time.
-                </div>
-
-                <div className="menu-billing-actions">
-                  {!billReady ? (
-                    <button
-                      type="button"
-                      onClick={handleGenerateBill}
-                      disabled={billActionLoading || sessionLoading || missingTableContext}
-                      className={`menu-primary-button ${
-                        billActionLoading || sessionLoading || missingTableContext ? "is-disabled" : ""
-                      }`}
-                    >
-                      <FileText size={17} />
-                      <span>Generate Bill</span>
-                    </button>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => handleSelectPaymentMethod("QR")}
-                        disabled={billActionLoading}
-                        className={`menu-billing-method-button ${billActionLoading ? "is-disabled" : ""}`}
-                      >
-                        <QrCode size={17} />
-                        <span>
-                          {billActionLoading && selectedPaymentMethod === "QR"
-                            ? "Preparing..."
-                            : "Pay via QR"}
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSelectPaymentMethod("UPI")}
-                        disabled={billActionLoading}
-                        className={`menu-billing-method-button ${billActionLoading ? "is-disabled" : ""}`}
-                      >
-                        <Wallet size={17} />
-                        <span>
-                          {billActionLoading && selectedPaymentMethod === "UPI"
-                            ? "Preparing..."
-                            : "Pay via UPI"}
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSelectPaymentMethod("CASH")}
-                        disabled={billActionLoading}
-                        className={`menu-billing-method-button is-primary ${billActionLoading ? "is-disabled" : ""}`}
-                      >
-                        <FileText size={17} />
-                        <span>
-                          {billActionLoading && selectedPaymentMethod === "CASH"
-                            ? "Preparing..."
-                            : "Pay with Cash"}
-                        </span>
-                      </button>
-                    </>
-                  )}
-                </div>
-              </>
-            )}
-          </article>
+          <article className="menu-panel">{liveOrdersContent}</article>
+          <article className="menu-panel">{billingContent}</article>
         </section>
 
         <nav className="menu-category-nav no-scrollbar">
@@ -744,7 +808,14 @@ export default function Menu() {
                 onClick={() => setActiveCategory(cat)}
                 className={`menu-display menu-category-button ${isActive ? "is-active" : ""}`}
               >
-                {cat}
+                {cat === "Featured" ? (
+                  <>
+                    <span className="menu-category-label menu-category-label-mobile">All Day</span>
+                    <span className="menu-category-label menu-category-label-desktop">Featured</span>
+                  </>
+                ) : (
+                  <span className="menu-category-label">{cat}</span>
+                )}
               </button>
             );
           })}
@@ -797,6 +868,7 @@ export default function Menu() {
       {cartCount > 0 ? (
         <CartButton count={cartCount} total={cartTotal} onClick={() => setIsCartOpen(true)} />
       ) : null}
+
     </div>
   );
 }
