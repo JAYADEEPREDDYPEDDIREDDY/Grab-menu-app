@@ -47,24 +47,32 @@ const resolveTable = async ({ tableId, restaurantId }) => {
   };
 };
 
-const buildCustomerSessionPayload = async (session) => {
-  const restaurant = await Restaurant.findById(session.restaurantId).select(
-    'name paymentQrUrl upiId'
+const buildRestaurantPayload = async (restaurantId) => {
+  if (!restaurantId) {
+    return null;
+  }
+
+  const restaurant = await Restaurant.findById(restaurantId).select(
+    'name paymentQrUrl upiId gstRate serviceChargeRate'
   );
 
+  if (!restaurant) {
+    return null;
+  }
+
   return {
-    session,
-    restaurant: restaurant
-      ? {
-          name: restaurant.name,
-          paymentQrUrl: restaurant.paymentQrUrl || '',
-          upiId: restaurant.upiId || '',
-          gstRate: Number(restaurant.gstRate || 0),
-          serviceChargeRate: Number(restaurant.serviceChargeRate || 0),
-        }
-      : null,
+    name: restaurant.name,
+    paymentQrUrl: restaurant.paymentQrUrl || '',
+    upiId: restaurant.upiId || '',
+    gstRate: Number(restaurant.gstRate || 0),
+    serviceChargeRate: Number(restaurant.serviceChargeRate || 0),
   };
 };
+
+const buildCustomerSessionPayload = async (session) => ({
+  session,
+  restaurant: await buildRestaurantPayload(session.restaurantId),
+});
 
 const normalizeActiveSession = async (req, session, options = {}) => {
   const { notify = false } = options;
@@ -167,6 +175,7 @@ router.get('/table/:tableId', async (req, res) => {
     const { tableId } = req.params;
     const { restaurantId, sessionToken } = req.query;
     const { table } = await resolveTable({ tableId, restaurantId });
+    const restaurantPayload = await buildRestaurantPayload(table.restaurantId);
 
     let activeSession = await TableSession.findOne({
       tableId: table._id,
@@ -176,7 +185,7 @@ router.get('/table/:tableId', async (req, res) => {
     activeSession = await normalizeActiveSession(req, activeSession);
 
     if (!activeSession) {
-      return res.json({ session: null, locked: false });
+      return res.json({ session: null, locked: false, restaurant: restaurantPayload });
     }
 
     const sameSession = sessionToken && activeSession.sessionToken === sessionToken;
@@ -184,6 +193,7 @@ router.get('/table/:tableId', async (req, res) => {
       return res.status(423).json({
         locked: true,
         message: 'This table is currently active. You cannot place a new order.',
+        restaurant: restaurantPayload,
       });
     }
 

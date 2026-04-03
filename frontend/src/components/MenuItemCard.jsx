@@ -61,9 +61,13 @@ export default function MenuItemCard({ item, disabled = false, disabledLabel = '
           type="button"
           onClick={() => addToCart(item)}
           disabled={disabled}
+          aria-label={disabled ? disabledLabel : 'Add to Cart'}
           className={`menu-item-button ${disabled ? 'is-disabled' : ''}`}
         >
-          <span>{disabled ? disabledLabel : 'Add to Cart'}</span>
+          <span className="menu-item-button-label">
+            {disabled ? disabledLabel : 'Add to Cart'}
+          </span>
+          <span className="menu-item-button-icon">+</span>
         </button>
       </div>
     </article>
