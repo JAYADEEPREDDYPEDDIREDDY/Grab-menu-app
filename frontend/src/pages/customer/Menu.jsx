@@ -49,6 +49,9 @@ export default function Menu() {
   const [sessionActionLoading, setSessionActionLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("Featured");
+  const [foodTypeFilter, setFoodTypeFilter] = useState("ALL");
+  const [priceFilter, setPriceFilter] = useState("ALL");
+  const [priceSort, setPriceSort] = useState("DEFAULT");
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [session, setSession] = useState(null);
   const [restaurant, setRestaurant] = useState(null);
@@ -386,6 +389,41 @@ export default function Menu() {
     return ["Featured", ...unique];
   }, [items]);
 
+  const filterCounts = useMemo(
+    () =>
+      items.reduce(
+        (counts, item) => {
+          const price = Number(item.price || 0);
+
+          counts.ALL += 1;
+          if (item.isVeg === false) {
+            counts.NON_VEG += 1;
+          } else {
+            counts.VEG += 1;
+          }
+
+          if (price <= 200) {
+            counts.BUDGET += 1;
+          } else if (price <= 500) {
+            counts.MID += 1;
+          } else {
+            counts.PREMIUM += 1;
+          }
+
+          return counts;
+        },
+        {
+          ALL: 0,
+          VEG: 0,
+          NON_VEG: 0,
+          BUDGET: 0,
+          MID: 0,
+          PREMIUM: 0,
+        }
+      ),
+    [items]
+  );
+
   const visibleItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     let list = items;
@@ -394,13 +432,40 @@ export default function Menu() {
       list = list.filter((item) => (item.category || "Others").trim() === activeCategory);
     }
 
-    if (!q) return list;
+    if (foodTypeFilter === "VEG") {
+      list = list.filter((item) => item.isVeg !== false);
+    } else if (foodTypeFilter === "NON_VEG") {
+      list = list.filter((item) => item.isVeg === false);
+    }
 
-    return list.filter(
-      (item) =>
-        item.name?.toLowerCase().includes(q) || item.description?.toLowerCase().includes(q)
-    );
-  }, [activeCategory, items, searchQuery]);
+    if (priceFilter === "BUDGET") {
+      list = list.filter((item) => Number(item.price || 0) <= 200);
+    } else if (priceFilter === "MID") {
+      list = list.filter((item) => {
+        const price = Number(item.price || 0);
+        return price > 200 && price <= 500;
+      });
+    } else if (priceFilter === "PREMIUM") {
+      list = list.filter((item) => Number(item.price || 0) > 500);
+    }
+
+    if (q) {
+      list = list.filter(
+        (item) =>
+          item.name?.toLowerCase().includes(q) || item.description?.toLowerCase().includes(q)
+      );
+    }
+
+    if (priceSort === "LOW_TO_HIGH") {
+      return [...list].sort((a, b) => Number(a.price || 0) - Number(b.price || 0));
+    }
+
+    if (priceSort === "HIGH_TO_LOW") {
+      return [...list].sort((a, b) => Number(b.price || 0) - Number(a.price || 0));
+    }
+
+    return list;
+  }, [activeCategory, foodTypeFilter, items, priceFilter, priceSort, searchQuery]);
 
   const heroImage = useMemo(() => {
     const popular = items.find((item) => item.isPopular && item.image);
@@ -821,6 +886,67 @@ export default function Menu() {
           })}
         </nav>
 
+        <section className="menu-filter-panel">
+          <div className="menu-filter-block">
+            <div className="menu-filter-heading-row">
+              <p className="menu-filter-heading">Food Type</p>
+              <span className="menu-filter-summary">
+                {filterCounts.VEG} veg • {filterCounts.NON_VEG} non-veg
+              </span>
+            </div>
+            <div className="menu-filter-chip-row">
+              {[
+                { value: "ALL", label: "All" },
+                { value: "VEG", label: "Veg" },
+                { value: "NON_VEG", label: "Non-Veg" },
+              ].map((filter) => (
+                <button
+                  key={filter.value}
+                  type="button"
+                  onClick={() => setFoodTypeFilter(filter.value)}
+                  className={`menu-filter-chip ${
+                    foodTypeFilter === filter.value ? "is-active" : ""
+                  }`}
+                >
+                  <span>{filter.label}</span>
+                  <span className="menu-filter-chip-count">
+                    {filterCounts[filter.value]}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="menu-filter-toolbar">
+            <label className="menu-select-field">
+              <span className="menu-select-label">Cost</span>
+              <select
+                value={priceFilter}
+                onChange={(event) => setPriceFilter(event.target.value)}
+                className="menu-select-input"
+              >
+                <option value="ALL">All prices</option>
+                <option value="BUDGET">Budget (up to {RS}200)</option>
+                <option value="MID">Mid-range ({RS}201-{RS}500)</option>
+                <option value="PREMIUM">Premium (above {RS}500)</option>
+              </select>
+            </label>
+
+            <label className="menu-select-field">
+              <span className="menu-select-label">Sort</span>
+              <select
+                value={priceSort}
+                onChange={(event) => setPriceSort(event.target.value)}
+                className="menu-select-input"
+              >
+                <option value="DEFAULT">Recommended</option>
+                <option value="LOW_TO_HIGH">Price: Low to High</option>
+                <option value="HIGH_TO_LOW">Price: High to Low</option>
+              </select>
+            </label>
+          </div>
+        </section>
+
         {loading ? (
           <div className="menu-grid">
             {[...Array(6)].map((_, i) => (
@@ -841,11 +967,11 @@ export default function Menu() {
         ) : (
           <div className="menu-empty">
             <p className="menu-empty-title">
-              {items.length ? "No items match your search." : "This menu is empty."}
+              {items.length ? "No items match your filters." : "This menu is empty."}
             </p>
             <p className="menu-empty-subtitle">
               {items.length
-                ? "Try another keyword or switch categories."
+                ? "Try another keyword, cost range, or food type."
                 : "Ask the restaurant staff to add menu items for this location."}
             </p>
           </div>
