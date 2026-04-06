@@ -841,6 +841,70 @@
   color: var(--on-surface-variant);
 }
 
+.landing-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(6, 10, 20, 0.75);
+  backdrop-filter: blur(6px);
+}
+
+.landing-modal-card {
+  width: min(980px, 100%);
+  background: #0f1628;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.landing-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.landing-modal-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--white);
+}
+
+.landing-modal-close {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: var(--white);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.landing-modal-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.landing-modal-body {
+  padding: 16px 20px 22px;
+}
+
+.landing-demo-video {
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  background: #000;
+}
+
 @media (min-width: 768px) {
   .landing-nav {
     display: flex;

@@ -1,0 +1,285 @@
+.contact-page {
+  --contact-bg: #0b1224;
+  --contact-card: #121a2f;
+  --contact-card-2: #0f192c;
+  --contact-border: rgba(255, 255, 255, 0.06);
+  --contact-muted: rgba(234, 242, 255, 0.7);
+  --contact-soft: rgba(234, 242, 255, 0.5);
+  --contact-accent: #ff8a5b;
+  --contact-accent-strong: #ff6f3c;
+  --contact-outline: rgba(255, 255, 255, 0.1);
+  background: radial-gradient(circle at top left, rgba(255, 138, 91, 0.14), transparent 45%),
+    radial-gradient(circle at 80% 20%, rgba(120, 140, 255, 0.15), transparent 50%),
+    var(--contact-bg);
+  color: #eef2ff;
+  min-height: 100vh;
+  padding-bottom: 120px;
+  font-family: "Be Vietnam Pro", sans-serif;
+}
+
+.contact-page * {
+  box-sizing: border-box;
+}
+
+.contact-container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 88px 20px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 72px;
+}
+
+.contact-hero {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.contact-title {
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  color: #f5f7ff;
+}
+
+.contact-title span {
+  color: var(--contact-accent);
+}
+
+.contact-subtitle {
+  max-width: 640px;
+  margin: 0 auto;
+  font-size: 15px;
+  color: var(--contact-soft);
+}
+
+.contact-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 32px;
+}
+
+.contact-form-card {
+  background: linear-gradient(180deg, rgba(20, 28, 48, 0.95), rgba(15, 21, 40, 0.95));
+  border: 1px solid var(--contact-border);
+  border-radius: 18px;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  box-shadow: 0 24px 48px rgba(2, 8, 20, 0.45);
+}
+
+.contact-form-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px 16px;
+}
+
+.contact-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.contact-label {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--contact-muted);
+  font-weight: 600;
+}
+
+.contact-input {
+  background: #070b16;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13px;
+  color: #f8f9ff;
+  outline: none;
+  transition: border 0.2s ease, box-shadow 0.2s ease;
+  font-family: "Be Vietnam Pro", sans-serif;
+}
+
+.contact-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.contact-input:focus {
+  border-color: rgba(255, 138, 91, 0.5);
+  box-shadow: 0 0 0 3px rgba(255, 138, 91, 0.15);
+}
+
+.contact-textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.contact-field--full {
+  grid-column: 1 / -1;
+}
+
+.contact-submit {
+  border: none;
+  border-radius: 12px;
+  padding: 14px 20px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  background: linear-gradient(90deg, #ff8a5b, #ffb189);
+  color: #2a1308;
+  box-shadow: 0 16px 32px rgba(255, 120, 70, 0.25);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.contact-submit:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 18px 36px rgba(255, 120, 70, 0.35);
+}
+
+.contact-info-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.contact-info-card {
+  background: var(--contact-card-2);
+  border: 1px solid var(--contact-border);
+  border-radius: 16px;
+  padding: 18px 20px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+.contact-info-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 138, 91, 0.18);
+  color: var(--contact-accent);
+  font-size: 18px;
+}
+
+.contact-info-icon.is-teal {
+  background: rgba(110, 222, 207, 0.18);
+  color: #5fd3c5;
+}
+
+.contact-info-icon.is-slate {
+  background: rgba(140, 158, 255, 0.18);
+  color: #9aa7ff;
+}
+
+.contact-info-body h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #f3f4ff;
+}
+
+.contact-info-body p {
+  margin: 4px 0 10px;
+  font-size: 12px;
+  color: var(--contact-soft);
+}
+
+.contact-info-value {
+  font-size: 12px;
+  color: var(--contact-accent);
+  font-weight: 600;
+}
+
+.contact-info-link {
+  font-size: 12px;
+  color: #a8b4ff;
+  font-weight: 600;
+}
+
+.contact-faq {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.contact-faq-header {
+  text-align: center;
+}
+
+.contact-faq-header h2 {
+  font-size: 24px;
+  margin: 0 0 8px;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  color: #f5f7ff;
+}
+
+.contact-faq-header p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--contact-soft);
+}
+
+.contact-faq-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.contact-faq-item {
+  background: var(--contact-card);
+  border: 1px solid var(--contact-border);
+  border-radius: 14px;
+  padding: 18px 20px;
+}
+
+.contact-faq-question {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+  font-size: 14px;
+  color: #f3f5ff;
+  margin-bottom: 10px;
+}
+
+.contact-faq-question .material-symbols-outlined {
+  font-size: 18px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.contact-faq-answer {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--contact-muted);
+}
+
+@media (min-width: 768px) {
+  .contact-title {
+    font-size: 48px;
+  }
+
+  .contact-form-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .contact-grid {
+    grid-template-columns: 1.2fr 0.8fr;
+    align-items: start;
+  }
+}
+
+@media (min-width: 1024px) {
+  .contact-title {
+    font-size: 52px;
+  }
+}
