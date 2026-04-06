@@ -5,6 +5,7 @@ import { CartProvider } from './context/CartContext';
 import Menu from './pages/customer/Menu';
 import OrderTracking from './pages/customer/OrderTracking';
 import Landing from './pages/Landing';
+import Contact from './pages/Contact';
 
 import AdminLogin from './pages/admin/AdminLogin';
 import Dashboard from './pages/admin/Dashboard';
@@ -37,6 +38,8 @@ function App() {
   const AppShell = () => {
     const location = useLocation();
     const isLanding = location.pathname === "/";
+    const isContact = location.pathname === "/contact";
+    const showGlow = !isLanding && !isContact;
 
     return (
       <div
@@ -46,7 +49,7 @@ function App() {
             : "text-[hsl(var(--hue,250),10%,95%)] bg-[hsl(var(--hue,250),20%,8%)]"
         }`}
       >
-        {!isLanding ? (
+        {showGlow ? (
           <>
             <div className="bg-glow blob-1 fixed w-[400px] h-[400px] rounded-full blur-[100px] bg-accent/30 top-[-100px] left-[-100px] z-0 animate-[pulseGlow_8s_infinite_alternate_ease-in-out]" />
             <div className="bg-glow blob-2 fixed w-[300px] h-[300px] rounded-full blur-[100px] bg-[hsla(280,80%,60%,0.2)] bottom-[-50px] right-[-50px] z-0 animate-[pulseGlow_8s_infinite_alternate_ease-in-out] [animation-delay:-4s]" />
@@ -56,6 +59,7 @@ function App() {
         <div className="relative z-10 w-full">
           <Routes>
             <Route path="/" element={<Landing />} />
+            <Route path="/contact" element={<Contact />} />
             <Route path="/menu" element={<Menu />} />
             <Route path="/order/:id" element={<OrderTracking />} />
 

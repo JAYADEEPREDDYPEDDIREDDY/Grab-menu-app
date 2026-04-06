@@ -1,44 +1,44 @@
-﻿import { Link } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import Navbar from "../components/Navbar";
 import "./Landing.css";
 
 export default function Landing() {
+  const [isDemoOpen, setIsDemoOpen] = useState(false);
+  const videoRef = useRef(null);
+
+  useEffect(() => {
+    if (!isDemoOpen) {
+      if (videoRef.current) {
+        videoRef.current.pause();
+        videoRef.current.currentTime = 0;
+      }
+      document.body.style.overflow = "";
+      return;
+    }
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setIsDemoOpen(false);
+      }
+    };
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "";
+    };
+  }, [isDemoOpen]);
+
+  const openDemo = () => setIsDemoOpen(true);
+  const closeDemo = () => setIsDemoOpen(false);
+
   return (
     <div className="landing-page">
       <div className="landing-shell">
-        <header className="landing-header">
-          <div className="landing-brand">
-            <div className="landing-brand-icon">
-              <svg fill="currentColor" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
-                <path
-                  clipRule="evenodd"
-                  d="M12.0799 24L4 19.2479L9.95537 8.75216L18.04 13.4961L18.0446 4H29.9554L29.96 13.4961L38.0446 8.75216L44 19.2479L35.92 24L44 28.7521L38.0446 39.2479L29.96 34.5039L29.9554 44H18.0446L18.04 34.5039L9.95537 39.2479L4 28.7521L12.0799 24Z"
-                  fillRule="evenodd"
-                />
-              </svg>
-            </div>
-            <h2 className="landing-brand-name">Grab Menu</h2>
-          </div>
-          <div className="landing-header-actions">
-            <nav className="landing-nav">
-              <a className="landing-nav-link" href="#features">
-                Features
-              </a>
-              <a className="landing-nav-link" href="#how-it-works">
-                How it Works
-              </a>
-              <a className="landing-nav-link" href="#pricing">
-                Pricing
-              </a>
-              <a className="landing-nav-link" href="#testimonials">
-                Testimonials
-              </a>
-            </nav>
-            <Link className="landing-btn landing-btn--small landing-btn--header" to="/menu">
-              Get Started
-            </Link>
-          </div>
-        </header>
-
+        <Navbar />
         <section className="landing-hero">
           <div className="landing-hero-content">
             <div className="landing-hero-text">
@@ -52,12 +52,12 @@ export default function Landing() {
               </p>
             </div>
             <div className="landing-hero-actions">
-              <Link className="landing-btn landing-btn--primary" to="/menu">
+              <Link className="landing-btn landing-btn--primary" to="/contact">
                 Get Started
               </Link>
-              <Link className="landing-btn landing-btn--ghost" to="/menu">
+              <button className="landing-btn landing-btn--ghost" type="button" onClick={openDemo}>
                 View Demo
-              </Link>
+              </button>
             </div>
             <div className="landing-hero-note">
               <span className="material-symbols-outlined landing-icon-fill">check_circle</span>
@@ -358,9 +358,9 @@ export default function Landing() {
                   Core Analytics
                 </li>
               </ul>
-              <button className="landing-btn landing-btn--outline landing-btn--full" type="button">
+              <Link className="landing-btn landing-btn--outline landing-btn--full" to="/contact">
                 Get Started
-              </button>
+              </Link>
             </div>
             <div className="landing-pricing-card landing-pricing-card--featured">
               <div className="landing-pricing-badge">Most Popular</div>
@@ -389,9 +389,9 @@ export default function Landing() {
                   Priority Support
                 </li>
               </ul>
-              <button className="landing-btn landing-btn--primary landing-btn--full" type="button">
+              <Link className="landing-btn landing-btn--primary landing-btn--full" to="/contact">
                 Get Started Now
-              </button>
+              </Link>
             </div>
             <div className="landing-pricing-card">
               <div className="landing-pricing-header">
@@ -430,15 +430,42 @@ export default function Landing() {
               Join over 1,500 restaurants worldwide creating better experiences with Grab Menu.
             </p>
             <div className="landing-cta-actions">
-              <Link className="landing-btn landing-btn--primary landing-btn--cta" to="/menu">
+              <Link className="landing-btn landing-btn--primary landing-btn--cta" to="/contact">
                 Get Started for Free
               </Link>
-              <Link className="landing-btn landing-btn--cta landing-btn--outline" to="/menu">
+              <button
+                className="landing-btn landing-btn--cta landing-btn--outline"
+                type="button"
+                onClick={openDemo}
+              >
                 View Live Demo
-              </Link>
+              </button>
             </div>
           </div>
         </section>
+
+        {isDemoOpen ? (
+          <div className="landing-modal" role="dialog" aria-modal="true" aria-label="Grab Menu demo video" onClick={closeDemo}>
+            <div className="landing-modal-card" onClick={(event) => event.stopPropagation()}>
+              <div className="landing-modal-header">
+                <h3 className="landing-modal-title">Grab Menu Demo</h3>
+                <button className="landing-modal-close" type="button" onClick={closeDemo} aria-label="Close">
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
+              <div className="landing-modal-body">
+                <video
+                  ref={videoRef}
+                  className="landing-demo-video"
+                  src="/demo_video.mp4"
+                  controls
+                  autoPlay
+                  playsInline
+                />
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <footer className="landing-footer">
           <div className="landing-footer-inner">
@@ -453,7 +480,7 @@ export default function Landing() {
             <div className="landing-footer-links">
               <a href="#">Privacy Policy</a>
               <a href="#">Terms of Service</a>
-              <a href="#">Contact</a>
+              <Link to="/contact">Contact</Link>
             </div>
             <div className="landing-footer-copy">&copy; 2024 Grab Menu Inc. All rights reserved.</div>
           </div>
@@ -462,3 +489,5 @@ export default function Landing() {
     </div>
   );
 }
+
+
