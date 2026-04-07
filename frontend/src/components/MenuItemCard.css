@@ -67,29 +67,42 @@
   left: 12px;
   top: 12px;
   display: flex;
-  height: 24px;
-  width: 24px;
+  height: 26px;
+  width: 26px;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.5);
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 2px solid transparent;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
 }
 
 .menu-item-badge {
-  height: 12px;
-  width: 12px;
-  border-radius: 999px;
-  border: 1px solid transparent;
+  position: relative;
+  display: block;
+}
+
+.menu-item-badge-wrap.is-veg {
+  border-color: #179c31;
+}
+
+.menu-item-badge-wrap.is-non-veg {
+  border-color: #b31313;
 }
 
 .menu-item-badge.is-veg {
-  background: #34d399;
-  border-color: #34d399;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #179c31;
 }
 
 .menu-item-badge.is-non-veg {
-  background: #ef4444;
-  border-color: #ef4444;
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 14px solid #b31313;
 }
 
 .menu-item-special {
@@ -223,14 +236,21 @@
   .menu-item-badge-wrap {
     left: 8px;
     top: 8px;
-    height: 18px;
-    width: 18px;
-    border-radius: 5px;
+    height: 20px;
+    width: 20px;
+    border-radius: 2px;
+    border-width: 1.5px;
   }
 
-  .menu-item-badge {
-    height: 9px;
-    width: 9px;
+  .menu-item-badge.is-veg {
+    width: 10px;
+    height: 10px;
+  }
+
+  .menu-item-badge.is-non-veg {
+    border-left-width: 6px;
+    border-right-width: 6px;
+    border-bottom-width: 10px;
   }
 
   .menu-item-special {

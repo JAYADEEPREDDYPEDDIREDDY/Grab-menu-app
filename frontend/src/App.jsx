@@ -10,6 +10,7 @@ import AdminLogin from './pages/admin/AdminLogin';
 import Dashboard from './pages/admin/Dashboard';
 import Analytics from './pages/admin/Analytics';
 import MenuManager from './pages/admin/MenuManager';
+import CategoryManager from './pages/admin/CategoryManager';
 import MenuImport from './pages/admin/MenuImport';
 import TableManager from './pages/admin/TableManager';
 import Billing from './pages/admin/Billing';
@@ -88,6 +89,16 @@ function App() {
                 <ProtectedRoute allowedRoles={['RESTAURANT_ADMIN']} loginPath="/admin/login">
                   <AdminLayout>
                     <MenuManager />
+                  </AdminLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/categories"
+              element={
+                <ProtectedRoute allowedRoles={['RESTAURANT_ADMIN']} loginPath="/admin/login">
+                  <AdminLayout>
+                    <CategoryManager />
                   </AdminLayout>
                 </ProtectedRoute>
               }

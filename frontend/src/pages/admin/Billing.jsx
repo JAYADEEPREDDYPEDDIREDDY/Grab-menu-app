@@ -101,6 +101,41 @@ function BillDetailsDialog({ bill, open, onClose, onApproveCash, onMarkPaid, sub
             </Stack>
           </Card>
 
+          <Card sx={{ backgroundColor: '#221F1C', borderRadius: '20px', p: 2.5 }}>
+            <Stack spacing={1}>
+              <Typography variant="h6">Customer Feedback</Typography>
+              {bill.feedback ? (
+                <>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center">
+                    <Typography color="text.secondary">Rating</Typography>
+                    <Typography sx={{ color: '#FFB067', fontWeight: 700 }}>
+                      {'★'.repeat(Number(bill.feedback.rating || 0))}
+                      {'☆'.repeat(Math.max(5 - Number(bill.feedback.rating || 0), 0))}
+                    </Typography>
+                  </Stack>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center">
+                    <Typography color="text.secondary">Guest</Typography>
+                    <Typography>{bill.feedback.customerName || 'Anonymous'}</Typography>
+                  </Stack>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center">
+                    <Typography color="text.secondary">Submitted</Typography>
+                    <Typography>
+                      {new Date(bill.feedback.submittedAt || bill.updatedAt || bill.createdAt).toLocaleString()}
+                    </Typography>
+                  </Stack>
+                  <Typography color="text.secondary">Comment</Typography>
+                  <Typography>
+                    {bill.feedback.comment || 'The guest submitted a rating without any comment.'}
+                  </Typography>
+                </>
+              ) : (
+                <Typography color="text.secondary">
+                  No customer feedback has been submitted for this bill yet.
+                </Typography>
+              )}
+            </Stack>
+          </Card>
+
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} justifyContent="flex-end">
             {bill.paymentStatus === 'AWAITING_APPROVAL' ? (
               <Button
@@ -245,6 +280,22 @@ export default function Billing() {
     }),
     [activeBills, awaitingApproval, history]
   );
+
+  const feedbackBills = useMemo(() => {
+    const deduped = new Map();
+
+    [...activeBills, ...awaitingApproval, ...history].forEach((bill) => {
+      if (bill?.feedback && bill?._id && !deduped.has(bill._id)) {
+        deduped.set(bill._id, bill);
+      }
+    });
+
+    return Array.from(deduped.values()).sort(
+      (left, right) =>
+        new Date(right.feedback?.submittedAt || right.updatedAt || right.createdAt).getTime() -
+        new Date(left.feedback?.submittedAt || left.updatedAt || left.createdAt).getTime()
+    );
+  }, [activeBills, awaitingApproval, history]);
 
   const saveBillingDefaults = async () => {
     try {
@@ -454,6 +505,7 @@ export default function Billing() {
               <Tab value="active" label={`Active Bills (${activeBills.length})`} />
               <Tab value="approval" label={`Awaiting Approval (${awaitingApproval.length})`} />
               <Tab value="history" label="Billing History" />
+              <Tab value="feedback" label={`Feedback (${feedbackBills.length})`} />
             </Tabs>
 
             {tab === 'active' ? (
@@ -566,6 +618,55 @@ export default function Billing() {
                   <Typography color="text.secondary">No paid bills for this range.</Typography>
                 )}
               </Stack>
+            ) : null}
+
+            {tab === 'feedback' ? (
+              feedbackBills.length ? (
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Tables</TableCell>
+                      <TableCell>Rating</TableCell>
+                      <TableCell>Guest</TableCell>
+                      <TableCell>Comment</TableCell>
+                      <TableCell>Submitted</TableCell>
+                      <TableCell align="right">Bill</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {feedbackBills.map((bill) => (
+                      <TableRow key={bill._id}>
+                        <TableCell>{(bill.tableIds || []).map((table) => `T${table.tableNumber}`).join(', ')}</TableCell>
+                        <TableCell sx={{ color: '#FFB067', fontWeight: 700 }}>
+                          {'★'.repeat(Number(bill.feedback?.rating || 0))}
+                          {'☆'.repeat(Math.max(5 - Number(bill.feedback?.rating || 0), 0))}
+                        </TableCell>
+                        <TableCell>{bill.feedback?.customerName || 'Anonymous'}</TableCell>
+                        <TableCell sx={{ maxWidth: 340 }}>
+                          <Typography
+                            sx={{
+                              maxWidth: 340,
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                            }}
+                          >
+                            {bill.feedback?.comment || 'Rating only'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          {new Date(bill.feedback?.submittedAt || bill.updatedAt || bill.createdAt).toLocaleString()}
+                        </TableCell>
+                        <TableCell align="right">
+                          <Button size="small" onClick={() => setActiveBill(bill)}>View</Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <Typography color="text.secondary">No customer feedback has been submitted yet.</Typography>
+              )
             ) : null}
           </Card>
         </>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -6,8 +6,12 @@ import {
   Box,
   Button,
   Card,
+  FormControl,
   FormControlLabel,
+  InputLabel,
   LinearProgress,
+  MenuItem,
+  Select,
   Stack,
   Switch,
   TextField,
@@ -23,7 +27,9 @@ const exampleText = `Chicken 65 | 15 | Starter | Crispy fried chicken
 Butter Chicken | 18 | Main Course | Creamy tomato curry
 Lime Soda | 5 | Drinks | Fresh citrus cooler`;
 
+const defaultCategories = ['Starter', 'Main Course', 'Drinks', 'Dessert', 'Snack'];
 const TESSERACT_CDN_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+const NEW_CATEGORY_VALUE = '__new__';
 
 const loadTesseractScript = () =>
   new Promise((resolve, reject) => {
@@ -35,9 +41,11 @@ const loadTesseractScript = () =>
     const existingScript = document.querySelector(`script[src="${TESSERACT_CDN_URL}"]`);
     if (existingScript) {
       existingScript.addEventListener('load', () => resolve(window.Tesseract), { once: true });
-      existingScript.addEventListener('error', () => reject(new Error('Failed to load OCR engine')), {
-        once: true,
-      });
+      existingScript.addEventListener(
+        'error',
+        () => reject(new Error('Failed to load OCR engine')),
+        { once: true }
+      );
       return;
     }
 
@@ -49,11 +57,71 @@ const loadTesseractScript = () =>
     document.body.appendChild(script);
   });
 
+const cleanExtractedText = (rawText = '') => {
+  const normalized = rawText
+    .replace(/\r/g, '\n')
+    .replace(/[\u2022\u25CF\u25AA\u25E6\u00B7]/g, ' ')
+    .replace(/[\u201C\u201D"]/g, '')
+    .replace(/[\u2018\u2019']/g, '')
+    .replace(/[^\S\n]+/g, ' ')
+    .replace(/[^\w\s|,.\-:/&()+₹$]/g, ' ')
+    .replace(/[|]{2,}/g, '|')
+    .replace(/-{3,}/g, '-')
+    .replace(/[ ]{2,}/g, ' ');
+
+  const lines = normalized
+    .split('\n')
+    .map((line) =>
+      line
+        .replace(/\s*\|\s*/g, ' | ')
+        .replace(/\s*,\s*/g, ', ')
+        .replace(/\s*-\s*/g, ' - ')
+        .replace(/[ ]{2,}/g, ' ')
+        .trim()
+    )
+    .filter(Boolean)
+    .filter((line) => /[a-zA-Z]/.test(line))
+    .filter((line) => !/^[₹$]?\s*\d+([.,]\d+)?$/.test(line))
+    .filter((line) => line.replace(/[^a-zA-Z]/g, '').length >= 3);
+
+  const merged = [];
+  for (const line of lines) {
+    const previous = merged[merged.length - 1];
+    const looksLikeContinuation =
+      previous &&
+      !/(\||,| - |\d)/.test(previous) &&
+      !/(\||,| - |\d)/.test(line) &&
+      previous.length < 28;
+
+    if (looksLikeContinuation) {
+      merged[merged.length - 1] = `${previous} ${line}`.replace(/[ ]{2,}/g, ' ').trim();
+      continue;
+    }
+
+    merged.push(line);
+  }
+
+  return merged.join('\n');
+};
+
+const normalizePreviewItem = (item, categoryOptions) => {
+  const category = String(item.category || 'Main Course').trim() || 'Main Course';
+  const matchesExisting = categoryOptions.includes(category);
+
+  return {
+    ...item,
+    category,
+    _categoryMode: matchesExisting ? 'select' : 'new',
+    _newCategory: matchesExisting ? '' : category,
+  };
+};
+
 export default function MenuImport() {
   const { token } = useAuth();
   const navigate = useNavigate();
   const [sourceText, setSourceText] = useState(exampleText);
   const [previewItems, setPreviewItems] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [importing, setImporting] = useState(false);
   const [ocrReady, setOcrReady] = useState(false);
@@ -64,6 +132,15 @@ export default function MenuImport() {
   const [uploadedImagePreview, setUploadedImagePreview] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  const categoryOptions = useMemo(
+    () =>
+      Array.from(new Set([...defaultCategories, ...categories]))
+        .map((category) => category.trim())
+        .filter(Boolean)
+        .sort((left, right) => left.localeCompare(right)),
+    [categories]
+  );
 
   useEffect(() => {
     let active = true;
@@ -87,16 +164,34 @@ export default function MenuImport() {
     };
   }, []);
 
+  useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        const response = await fetch(getApiUrl('/api/categories'), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await response.json().catch(() => []);
+        if (response.ok) {
+          setCategories(Array.isArray(data) ? data.map((category) => category.name) : []);
+        }
+      } catch (loadError) {
+        console.error(loadError);
+      }
+    };
+
+    loadCategories();
+  }, [token]);
+
   const handleTextFileUpload = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     const text = await file.text();
-    setSourceText(text);
+    setSourceText(cleanExtractedText(text));
     setUploadedImageName('');
     setUploadedImagePreview('');
     setError('');
-    setSuccess('Loaded text file. Generate a preview when ready.');
+    setSuccess('Loaded text file. Review the cleaned text and generate a preview when ready.');
   };
 
   const handleImageUpload = async (event) => {
@@ -126,13 +221,13 @@ export default function MenuImport() {
         },
       });
 
-      const extractedText = result?.data?.text?.trim() || '';
+      const extractedText = cleanExtractedText(result?.data?.text?.trim() || '');
       if (!extractedText) {
-        throw new Error('No readable text was found in the uploaded image.');
+        throw new Error('No readable menu text was found after cleaning the uploaded image.');
       }
 
       setSourceText(extractedText);
-      setSuccess('Text extracted from image. Review it and generate the menu preview.');
+      setSuccess('Text extracted and cleaned from the image. Review it and generate the menu preview.');
     } catch (ocrError) {
       console.error(ocrError);
       setError(ocrError.message || 'Failed to extract text from the uploaded image.');
@@ -153,7 +248,7 @@ export default function MenuImport() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ sourceText }),
+        body: JSON.stringify({ sourceText: cleanExtractedText(sourceText) }),
       });
       const data = await response.json();
 
@@ -161,7 +256,9 @@ export default function MenuImport() {
         throw new Error(data.message || 'Failed to parse menu');
       }
 
-      setPreviewItems(data.items || []);
+      setPreviewItems(
+        (data.items || []).map((item) => normalizePreviewItem(item, categoryOptions))
+      );
       setSuccess(`Parsed ${data.items.length} menu items. Review them before import.`);
     } catch (previewError) {
       setError(previewError.message || 'Failed to parse menu');
@@ -178,19 +275,58 @@ export default function MenuImport() {
     );
   };
 
+  const handleCategorySelect = (index, value) => {
+    setPreviewItems((current) =>
+      current.map((item, itemIndex) => {
+        if (itemIndex !== index) {
+          return item;
+        }
+
+        if (value === NEW_CATEGORY_VALUE) {
+          return {
+            ...item,
+            _categoryMode: 'new',
+            _newCategory: item._newCategory || '',
+          };
+        }
+
+        return {
+          ...item,
+          category: value,
+          _categoryMode: 'select',
+          _newCategory: '',
+        };
+      })
+    );
+  };
+
   const handleImport = async () => {
     setImporting(true);
     setError('');
     setSuccess('');
 
     try {
+      const sanitizedItems = previewItems.map((item) => ({
+        ...item,
+        category:
+          item._categoryMode === 'new'
+            ? String(item._newCategory || '').trim()
+            : String(item.category || '').trim(),
+      }));
+
+      if (sanitizedItems.some((item) => !item.category)) {
+        throw new Error('Please select or add a category for every imported item.');
+      }
+
       const response = await fetch(getApiUrl('/api/menu/import/commit'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ items: previewItems }),
+        body: JSON.stringify({
+          items: sanitizedItems.map(({ _categoryMode, _newCategory, ...item }) => item),
+        }),
       });
       const data = await response.json();
 
@@ -214,7 +350,7 @@ export default function MenuImport() {
           Menu Import
         </Typography>
         <Typography variant="subtitle1">
-          Upload a menu image or text file, extract menu text, review the parsed items, and import them into Menu Items.
+          Upload a menu image or text file, clean the extracted text, review parsed items, and import them into Menu Items.
         </Typography>
       </Box>
 
@@ -228,7 +364,7 @@ export default function MenuImport() {
               Image OCR Import
             </Typography>
             <Typography color="text.secondary" sx={{ fontSize: 14 }}>
-              Upload a menu image and the OCR engine will extract the text for preview.
+              Upload a menu image and the OCR engine will extract and clean the text before preview.
             </Typography>
           </Box>
 
@@ -293,13 +429,13 @@ export default function MenuImport() {
             </Card>
           ) : null}
 
-          <Typography variant="h6">Review Extracted / Pasted Text</Typography>
+          <Typography variant="h6">Review Cleaned Text</Typography>
           <TextField
             multiline
             minRows={10}
             value={sourceText}
             onChange={(event) => setSourceText(event.target.value)}
-            placeholder='Example: Chicken 65 | 15 | Starter | Crispy fried chicken'
+            placeholder="Example: Chicken 65 | 15 | Starter | Crispy fried chicken"
           />
 
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
@@ -310,6 +446,9 @@ export default function MenuImport() {
               disabled={loadingPreview}
             >
               {loadingPreview ? 'Parsing...' : 'Generate Preview'}
+            </Button>
+            <Button variant="outlined" onClick={() => setSourceText(cleanExtractedText(sourceText))}>
+              Clean Text Again
             </Button>
           </Stack>
         </Stack>
@@ -346,11 +485,21 @@ export default function MenuImport() {
                         handleItemChange(index, 'price', Number(event.target.value))
                       }
                     />
-                    <TextField
-                      label="Category"
-                      value={item.category}
-                      onChange={(event) => handleItemChange(index, 'category', event.target.value)}
-                    />
+                    <FormControl>
+                      <InputLabel>Category</InputLabel>
+                      <Select
+                        label="Category"
+                        value={item._categoryMode === 'new' ? NEW_CATEGORY_VALUE : item.category}
+                        onChange={(event) => handleCategorySelect(index, event.target.value)}
+                      >
+                        {categoryOptions.map((category) => (
+                          <MenuItem key={category} value={category}>
+                            {category}
+                          </MenuItem>
+                        ))}
+                        <MenuItem value={NEW_CATEGORY_VALUE}>Add new category</MenuItem>
+                      </Select>
+                    </FormControl>
                     <TextField
                       label="Description"
                       value={item.description}
@@ -358,6 +507,26 @@ export default function MenuImport() {
                         handleItemChange(index, 'description', event.target.value)
                       }
                     />
+                    {item._categoryMode === 'new' ? (
+                      <TextField
+                        label="New Category"
+                        value={item._newCategory}
+                        onChange={(event) =>
+                          setPreviewItems((current) =>
+                            current.map((entry, entryIndex) =>
+                              entryIndex === index
+                                ? {
+                                    ...entry,
+                                    _newCategory: event.target.value,
+                                    category: event.target.value,
+                                  }
+                                : entry
+                            )
+                          )
+                        }
+                        placeholder="Enter category name"
+                      />
+                    ) : null}
                   </Box>
 
                   <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mt: 2 }}>

@@ -1,12 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
   Box,
   Button,
   Card,
   Chip,
   FormControlLabel,
+  FormControl,
   IconButton,
+  InputLabel,
+  MenuItem,
+  Select,
   Stack,
   Switch,
   Table,
@@ -25,30 +32,65 @@ import { getApiUrl } from '../../config/api';
 const emptyForm = {
   name: '',
   price: '',
-  category: '',
+  category: 'Main Course',
   description: '',
   image: '',
   isVeg: true,
   isPopular: false,
 };
 
+const defaultCategories = ['Starter', 'Main Course', 'Drinks', 'Dessert', 'Snack'];
+
 export default function MenuManager() {
   const { token, user } = useAuth();
   const [items, setItems] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState(emptyForm);
   const [editId, setEditId] = useState(null);
+  const [categoryMode, setCategoryMode] = useState('select');
+  const [newCategory, setNewCategory] = useState('');
+
+  const categoryOptions = Array.from(
+    new Set(
+      [...defaultCategories, ...categories, ...items.map((item) => item.category).filter(Boolean)]
+        .map((category) => category.trim())
+        .filter(Boolean)
+    )
+  ).sort((left, right) => left.localeCompare(right));
+
+  const resetForm = () => {
+    setShowForm(false);
+    setEditId(null);
+    setFormData(emptyForm);
+    setCategoryMode('select');
+    setNewCategory('');
+  };
 
   const fetchItems = async () => {
     try {
       const query = user?.restaurantId ? `?restaurantId=${user.restaurantId}` : '';
-      const res = await fetch(getApiUrl(`/api/menu${query}`), {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setItems(data);
+      const [menuResponse, categoryResponse] = await Promise.all([
+        fetch(getApiUrl(`/api/menu${query}`), {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(getApiUrl('/api/categories'), {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
+
+      const menuData = await menuResponse.json().catch(() => []);
+      const categoryData = await categoryResponse.json().catch(() => []);
+
+      if (menuResponse.ok) {
+        setItems(menuData);
+      }
+
+      if (categoryResponse.ok) {
+        setCategories(
+          Array.isArray(categoryData) ? categoryData.map((category) => category.name) : []
+        );
       }
     } catch (error) {
       console.error(error);
@@ -64,6 +106,13 @@ export default function MenuManager() {
   const handleSubmit = async (event) => {
     event.preventDefault();
     try {
+      const resolvedCategory =
+        categoryMode === 'new' ? newCategory.trim() : String(formData.category || '').trim();
+
+      if (!resolvedCategory) {
+        return;
+      }
+
       const method = editId ? 'PUT' : 'POST';
       const url = editId
         ? getApiUrl(`/api/menu/${editId}`)
@@ -75,12 +124,14 @@ export default function MenuManager() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ ...formData, price: parseFloat(formData.price) }),
+        body: JSON.stringify({
+          ...formData,
+          category: resolvedCategory,
+          price: parseFloat(formData.price),
+        }),
       });
 
-      setShowForm(false);
-      setEditId(null);
-      setFormData(emptyForm);
+      resetForm();
       fetchItems();
     } catch (error) {
       console.error(error);
@@ -92,6 +143,8 @@ export default function MenuManager() {
       ...item,
       price: item.price?.toString() || '',
     });
+    setCategoryMode('select');
+    setNewCategory('');
     setEditId(item._id);
     setShowForm(true);
   };
@@ -124,26 +177,41 @@ export default function MenuManager() {
           variant="contained"
           startIcon={<AddRoundedIcon />}
           onClick={() => {
-            const next = !showForm;
-            setShowForm(next);
-            if (!next) {
-              setEditId(null);
-              setFormData(emptyForm);
+            if (showForm && !editId) {
+              resetForm();
+              return;
             }
+
+            setEditId(null);
+            setFormData(emptyForm);
+            setCategoryMode('select');
+            setNewCategory('');
+            setShowForm(true);
           }}
         >
-          {showForm ? 'Close editor' : 'Add item'}
+          {showForm && !editId ? 'Close editor' : 'Add item'}
         </Button>
       </Stack>
 
-      {showForm ? (
-        <Card sx={{ backgroundColor: '#1A1715', borderRadius: '20px', p: 3 }}>
+      <Dialog
+        open={showForm}
+        onClose={resetForm}
+        fullWidth
+        maxWidth="md"
+        PaperProps={{
+          sx: {
+            backgroundColor: '#1A1715',
+            borderRadius: '20px',
+            backgroundImage: 'none',
+          },
+        }}
+      >
+        <DialogTitle sx={{ pb: 1 }}>
+          {editId ? 'Edit menu item' : 'Create menu item'}
+        </DialogTitle>
+        <DialogContent sx={{ pt: 1 }}>
           <Box component="form" onSubmit={handleSubmit}>
             <Stack spacing={2.5}>
-              <Typography variant="h6">
-                {editId ? 'Edit menu item' : 'Create menu item'}
-              </Typography>
-
               <Box
                 sx={{
                   display: 'grid',
@@ -169,14 +237,30 @@ export default function MenuManager() {
                   }
                   required
                 />
-                <TextField
-                  label="Category"
-                  value={formData.category}
-                  onChange={(event) =>
-                    setFormData({ ...formData, category: event.target.value })
-                  }
-                  required
-                />
+                <FormControl required>
+                  <InputLabel>Category</InputLabel>
+                  <Select
+                    label="Category"
+                    value={categoryMode === 'new' ? '__new__' : formData.category}
+                    onChange={(event) => {
+                      if (event.target.value === '__new__') {
+                        setCategoryMode('new');
+                        setNewCategory('');
+                        return;
+                      }
+
+                      setCategoryMode('select');
+                      setFormData({ ...formData, category: event.target.value });
+                    }}
+                  >
+                    {categoryOptions.map((category) => (
+                      <MenuItem key={category} value={category}>
+                        {category}
+                      </MenuItem>
+                    ))}
+                    <MenuItem value="__new__">Add new category</MenuItem>
+                  </Select>
+                </FormControl>
                 <TextField
                   label="Image URL"
                   value={formData.image}
@@ -184,6 +268,15 @@ export default function MenuManager() {
                     setFormData({ ...formData, image: event.target.value })
                   }
                 />
+                {categoryMode === 'new' ? (
+                  <TextField
+                    label="New Category"
+                    value={newCategory}
+                    onChange={(event) => setNewCategory(event.target.value)}
+                    placeholder="Enter category name"
+                    required
+                  />
+                ) : null}
                 <TextField
                   label="Description"
                   multiline
@@ -225,11 +318,7 @@ export default function MenuManager() {
               <Stack direction="row" justifyContent="flex-end" spacing={1.5}>
                 <Button
                   variant="outlined"
-                  onClick={() => {
-                    setShowForm(false);
-                    setEditId(null);
-                    setFormData(emptyForm);
-                  }}
+                  onClick={resetForm}
                 >
                   Cancel
                 </Button>
@@ -239,8 +328,8 @@ export default function MenuManager() {
               </Stack>
             </Stack>
           </Box>
-        </Card>
-      ) : null}
+        </DialogContent>
+      </Dialog>
 
       <Card sx={{ backgroundColor: '#1A1715', borderRadius: '20px', overflow: 'hidden' }}>
         {loading ? (

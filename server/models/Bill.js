@@ -37,6 +37,33 @@ const billLineItemSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const billFeedbackSchema = new mongoose.Schema(
+  {
+    rating: {
+      type: Number,
+      min: 1,
+      max: 5,
+      required: true,
+    },
+    comment: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+      default: '',
+    },
+    customerName: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    submittedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  { _id: false }
+);
+
 const billSchema = new mongoose.Schema(
   {
     restaurantId: {
@@ -123,6 +150,10 @@ const billSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: '',
+    },
+    feedback: {
+      type: billFeedbackSchema,
+      default: null,
     },
   },
   { timestamps: true }

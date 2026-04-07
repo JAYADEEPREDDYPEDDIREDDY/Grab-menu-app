@@ -424,4 +424,69 @@ router.patch('/mark-paid/:billId', auth, requireRole('RESTAURANT_ADMIN'), async 
   }
 });
 
+router.post('/:billId/feedback', async (req, res) => {
+  try {
+    const { sessionId, sessionToken, rating, comment = '', customerName = '' } = req.body;
+    const numericRating = Number(rating);
+
+    if (!sessionId || !sessionToken) {
+      return res.status(400).json({ message: 'Session details are required to submit feedback.' });
+    }
+
+    if (!Number.isInteger(numericRating) || numericRating < 1 || numericRating > 5) {
+      return res.status(400).json({ message: 'Please choose a rating between 1 and 5.' });
+    }
+
+    const bill = await Bill.findById(req.params.billId);
+    if (!bill) {
+      return res.status(404).json({ message: 'Bill not found.' });
+    }
+
+    if (!bill.sessionId) {
+      return res.status(400).json({ message: 'This bill does not support customer feedback.' });
+    }
+
+    const resolvedSessionId = sessionId || String(bill.sessionId);
+    if (String(bill.sessionId) !== String(resolvedSessionId)) {
+      return res.status(403).json({ message: 'This feedback does not match the bill session.' });
+    }
+
+    const session = await TableSession.findById(resolvedSessionId);
+    if (!session) {
+      return res.status(404).json({ message: 'Table session not found.' });
+    }
+
+    if (session.sessionToken !== sessionToken) {
+      return res.status(403).json({ message: 'Session token mismatch.' });
+    }
+
+    if (String(session.restaurantId) !== String(bill.restaurantId)) {
+      return res.status(403).json({ message: 'You cannot submit feedback for another restaurant.' });
+    }
+
+    const trimmedComment = String(comment || '').trim().slice(0, 500);
+    const trimmedCustomerName = String(customerName || '').trim().slice(0, 80);
+
+    bill.feedback = {
+      rating: numericRating,
+      comment: trimmedComment,
+      customerName: trimmedCustomerName,
+      submittedAt: new Date(),
+    };
+    await bill.save();
+
+    if (trimmedCustomerName && !session.customerName) {
+      session.customerName = trimmedCustomerName;
+      await session.save();
+    }
+
+    await emitBillUpdate(req, bill._id);
+    const populatedBill = await populateBill(Bill.findById(bill._id));
+    return res.json(populatedBill);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Failed to submit feedback' });
+  }
+});
+
 module.exports = router;

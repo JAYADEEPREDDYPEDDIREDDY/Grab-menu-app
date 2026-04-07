@@ -31,7 +31,7 @@ export default function MenuItemCard({ item, disabled = false, disabledLabel = '
 
         <div className="menu-item-media-overlay" />
 
-        <div className="menu-item-badge-wrap">
+        <div className={`menu-item-badge-wrap ${badgeToneClass}`}>
           <span className={`menu-item-badge ${badgeToneClass}`} />
         </div>
 

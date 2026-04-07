@@ -74,17 +74,31 @@ const navItems = [
 function VegBadge({ isVeg }) {
   return (
     <span
-      className="flex items-center justify-center w-7 h-7 rounded-lg"
+      className="flex items-center justify-center w-7 h-7"
       style={{
-        background: "rgba(21,19,17,0.8)",
-        backdropFilter: "blur(8px)",
-        border: isVeg ? "1.5px solid rgba(34,197,94,0.6)" : "1.5px solid rgba(239,68,68,0.6)",
+        background: "rgba(255,255,255,0.96)",
+        borderRadius: "2px",
+        border: isVeg ? "2px solid #179c31" : "2px solid #b31313",
+        boxShadow: "0 8px 18px rgba(0,0,0,0.16)",
       }}
     >
-      <span
-        className="block w-2.5 h-2.5 rounded-full"
-        style={{ background: isVeg ? "#22c55e" : "#ef4444" }}
-      />
+      {isVeg ? (
+        <span
+          className="block rounded-full"
+          style={{ width: "13px", height: "13px", background: "#179c31" }}
+        />
+      ) : (
+        <span
+          className="block"
+          style={{
+            width: 0,
+            height: 0,
+            borderLeft: "7px solid transparent",
+            borderRight: "7px solid transparent",
+            borderBottom: "13px solid #b31313",
+          }}
+        />
+      )}
     </span>
   );
 }

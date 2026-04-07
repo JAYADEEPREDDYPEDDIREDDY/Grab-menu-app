@@ -455,6 +455,102 @@
   background: #fff;
 }
 
+.menu-feedback-card {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+  border-radius: 18px;
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.menu-feedback-header {
+  align-items: flex-start;
+}
+
+.menu-feedback-title {
+  font-size: 18px;
+}
+
+.menu-feedback-stars {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.menu-feedback-star {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #c8ad98;
+  cursor: pointer;
+  transition: all 180ms ease;
+}
+
+.menu-feedback-star:hover {
+  transform: translateY(-1px);
+  color: #ffd29f;
+  border-color: rgba(255, 184, 133, 0.32);
+}
+
+.menu-feedback-star.is-active {
+  color: #ffb04d;
+  border-color: rgba(255, 176, 77, 0.24);
+  background: rgba(255, 176, 77, 0.14);
+  box-shadow: 0 10px 20px rgba(255, 176, 77, 0.12);
+}
+
+.menu-feedback-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.menu-feedback-field {
+  display: grid;
+  gap: 8px;
+  color: #ddc6b5;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.menu-feedback-input {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 12px 14px;
+  font: inherit;
+  color: #fff;
+  outline: none;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.menu-feedback-input:focus {
+  border-color: rgba(255, 140, 43, 0.5);
+  box-shadow: 0 0 0 3px rgba(255, 140, 43, 0.12);
+}
+
+.menu-feedback-textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.menu-feedback-footer {
+  display: grid;
+  gap: 12px;
+}
+
+.menu-feedback-caption {
+  font-size: 12px;
+  color: #bda897;
+}
+
 .menu-orders-empty {
   margin-top: 18px;
   border-radius: 18px;
@@ -940,6 +1036,14 @@
   .menu-orders-empty {
     padding: 14px 12px;
     font-size: 12px;
+  }
+
+  .menu-feedback-card {
+    padding: 14px;
+  }
+
+  .menu-feedback-title {
+    font-size: 16px;
   }
 
   .menu-category-nav {

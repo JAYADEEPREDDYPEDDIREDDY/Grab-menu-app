@@ -15,6 +15,7 @@ import {
 import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded';
 import InsightsRoundedIcon from '@mui/icons-material/InsightsRounded';
 import RestaurantMenuRoundedIcon from '@mui/icons-material/RestaurantMenuRounded';
+import CategoryRoundedIcon from '@mui/icons-material/CategoryRounded';
 import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded';
 import QrCode2RoundedIcon from '@mui/icons-material/QrCode2Rounded';
 import ReceiptLongRoundedIcon from '@mui/icons-material/ReceiptLongRounded';
@@ -30,6 +31,7 @@ const navItems = [
   { label: 'Live Orders', path: '/admin', icon: DashboardRoundedIcon },
   { label: 'Analytics', path: '/admin/analytics', icon: InsightsRoundedIcon },
   { label: 'Menu Items', path: '/admin/menu', icon: RestaurantMenuRoundedIcon },
+  { label: 'Categories', path: '/admin/categories', icon: CategoryRoundedIcon },
   { label: 'Import Menu', path: '/admin/menu/import', icon: UploadFileRoundedIcon },
   { label: 'Tables & QR', path: '/admin/tables', icon: QrCode2RoundedIcon },
   { label: 'Billing', path: '/admin/billing', icon: ReceiptLongRoundedIcon },

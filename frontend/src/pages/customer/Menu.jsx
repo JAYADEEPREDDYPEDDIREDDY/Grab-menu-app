@@ -6,6 +6,7 @@ import {
   QrCode,
   Wallet,
   Search,
+  Star,
 } from "lucide-react";
 import { useCart } from "../../context/CartContext";
 import MenuItemCard from "../../components/MenuItemCard";
@@ -65,6 +66,11 @@ export default function Menu() {
   const [billingMessage, setBillingMessage] = useState("");
   const [billActionLoading, setBillActionLoading] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("");
+  const [feedbackRating, setFeedbackRating] = useState(0);
+  const [feedbackComment, setFeedbackComment] = useState("");
+  const [feedbackName, setFeedbackName] = useState("");
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [feedbackSuccess, setFeedbackSuccess] = useState("");
 
   const restoredSessionCartRef = useRef(false);
   const sessionTokenKey = useMemo(
@@ -285,6 +291,13 @@ export default function Menu() {
       restoredSessionCartRef.current = false;
     }
   }, [session?._id]);
+
+  useEffect(() => {
+    setFeedbackRating(Number(activeBill?.feedback?.rating || 0));
+    setFeedbackComment(activeBill?.feedback?.comment || "");
+    setFeedbackName(activeBill?.feedback?.customerName || session?.customerName || "");
+    setFeedbackSuccess("");
+  }, [activeBill?._id, activeBill?.feedback, session?.customerName]);
 
   useEffect(() => {
     const socket = io(SOCKET_BASE_URL);
@@ -555,6 +568,59 @@ export default function Menu() {
     }
   };
 
+  const handleSubmitFeedback = async () => {
+    const billSessionId = activeBill?.sessionId?._id || activeBill?.sessionId || session?._id;
+
+    if (!activeBill?._id || !billSessionId || !sessionTokenRef.current) {
+      setBillingError("Bill session missing. Refresh the page and try again.");
+      return;
+    }
+
+    if (!feedbackRating) {
+      setBillingError("Please choose a rating before submitting feedback.");
+      return;
+    }
+
+    try {
+      setFeedbackSubmitting(true);
+      setBillingError("");
+      setFeedbackSuccess("");
+
+      const response = await fetch(getApiUrl(`/api/billing/${activeBill._id}/feedback`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: billSessionId,
+          sessionToken: sessionTokenRef.current,
+          rating: feedbackRating,
+          comment: feedbackComment,
+          customerName: feedbackName,
+        }),
+      });
+
+      const rawBody = await response.text();
+      let data = {};
+
+      try {
+        data = rawBody ? JSON.parse(rawBody) : {};
+      } catch (parseError) {
+        data = { message: rawBody || "Failed to submit feedback." };
+      }
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to submit feedback.");
+      }
+
+      setActiveBill(data);
+      setFeedbackSuccess("Thanks for your feedback. The restaurant team can now review it.");
+    } catch (error) {
+      console.error(error);
+      setBillingError(error.message || "Failed to submit feedback.");
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  };
+
   const liveOrdersContent = (
     <>
       <div className="menu-panel-header">
@@ -702,6 +768,7 @@ export default function Menu() {
 
       {billingError ? <p className="menu-inline-error">{billingError}</p> : null}
       {billingMessage ? <p className="menu-inline-note">{billingMessage}</p> : null}
+      {feedbackSuccess ? <p className="menu-inline-note">{feedbackSuccess}</p> : null}
       {!billingMessage && customerNotice && session ? (
         <p className="menu-inline-note">{customerNotice}</p>
       ) : null}
@@ -762,6 +829,87 @@ export default function Menu() {
               />
             </div>
           ) : null}
+
+          <div className="menu-feedback-card">
+            <div className="menu-panel-header menu-feedback-header">
+              <div>
+                <p className="menu-panel-kicker">Feedback</p>
+                <h4 className="menu-display menu-feedback-title">Rate your dining experience</h4>
+              </div>
+              {activeBill.feedback ? (
+                <span className="menu-panel-pill is-success">Saved</span>
+              ) : (
+                <span className="menu-panel-pill is-neutral">Optional</span>
+              )}
+            </div>
+
+            <div className="menu-feedback-stars" role="radiogroup" aria-label="Feedback rating">
+              {[1, 2, 3, 4, 5].map((starValue) => {
+                const active = starValue <= feedbackRating;
+                return (
+                  <button
+                    key={starValue}
+                    type="button"
+                    className={`menu-feedback-star ${active ? "is-active" : ""}`}
+                    onClick={() => setFeedbackRating(starValue)}
+                    aria-label={`Rate ${starValue} star${starValue === 1 ? "" : "s"}`}
+                  >
+                    <Star size={18} fill={active ? "currentColor" : "none"} />
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="menu-feedback-grid">
+              <label className="menu-feedback-field">
+                <span>Your name</span>
+                <input
+                  type="text"
+                  value={feedbackName}
+                  onChange={(event) => setFeedbackName(event.target.value)}
+                  placeholder="Optional"
+                  maxLength={80}
+                  className="menu-feedback-input"
+                />
+              </label>
+
+              <label className="menu-feedback-field">
+                <span>Comments</span>
+                <textarea
+                  value={feedbackComment}
+                  onChange={(event) => setFeedbackComment(event.target.value)}
+                  placeholder="Tell the restaurant what went well or what can improve."
+                  maxLength={500}
+                  rows={4}
+                  className="menu-feedback-input menu-feedback-textarea"
+                />
+              </label>
+            </div>
+
+            <div className="menu-feedback-footer">
+              <span className="menu-feedback-caption">
+                {activeBill.feedback
+                  ? `Submitted on ${new Date(activeBill.feedback.submittedAt).toLocaleString("en-IN", {
+                      day: "2-digit",
+                      month: "short",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}`
+                  : "Your feedback will be visible to the restaurant admin panel."}
+              </span>
+
+              <button
+                type="button"
+                onClick={handleSubmitFeedback}
+                disabled={feedbackSubmitting || !feedbackRating}
+                className={`menu-primary-button ${
+                  feedbackSubmitting || !feedbackRating ? "is-disabled" : ""
+                }`}
+              >
+                <span>{feedbackSubmitting ? "Saving..." : activeBill.feedback ? "Update Feedback" : "Submit Feedback"}</span>
+              </button>
+            </div>
+          </div>
         </>
       ) : (
         <>

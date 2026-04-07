@@ -1,8 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const MenuItem = require('../models/MenuItem');
+const Category = require('../models/Category');
 const auth = require('../middleware/auth.middleware');
 const { requireRole } = require('../middleware/auth.middleware');
+const { normalizeCategoryName } = require('./category.routes');
 
 const knownCategories = [
   'starter',
@@ -32,11 +34,19 @@ const normalizeCategory = (value = '') => {
   if (['dessert', 'desserts'].includes(normalized)) return 'Dessert';
   if (['snack', 'snacks'].includes(normalized)) return 'Snack';
 
-  return value
-    .trim()
-    .split(/[\s-]+/)
-    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
-    .join(' ');
+  return normalizeCategoryName(value);
+};
+
+const ensureCategoryExists = async (restaurantId, categoryName) => {
+  if (!restaurantId || !categoryName) {
+    return;
+  }
+
+  await Category.findOneAndUpdate(
+    { restaurantId, name: categoryName },
+    { $setOnInsert: { restaurantId, name: categoryName } },
+    { upsert: true, new: true }
+  );
 };
 
 const buildPreviewItem = ({
@@ -119,8 +129,30 @@ const parseCsvSource = (sourceText) => {
     .filter(Boolean);
 };
 
-const parseTextSource = (sourceText) =>
+const cleanImportedText = (sourceText = '') =>
   sourceText
+    .replace(/\r/g, '\n')
+    .replace(/[\u2022\u25CF\u25AA\u25E6\u00B7]/g, ' ')
+    .replace(/[\u201C\u201D"]/g, '')
+    .replace(/[\u2018\u2019']/g, '')
+    .replace(/[^\w\s|,.\-:/&()+₹$]/g, ' ')
+    .replace(/[^\S\n]+/g, ' ')
+    .split(/\n+/)
+    .map((line) =>
+      line
+        .replace(/\s*\|\s*/g, ' | ')
+        .replace(/\s*,\s*/g, ', ')
+        .replace(/\s*-\s*/g, ' - ')
+        .replace(/[ ]{2,}/g, ' ')
+        .trim()
+    )
+    .filter(Boolean)
+    .filter((line) => /[a-zA-Z]/.test(line))
+    .filter((line) => line.replace(/[^a-zA-Z]/g, '').length >= 3)
+    .join('\n');
+
+const parseTextSource = (sourceText) =>
+  cleanImportedText(sourceText)
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
@@ -160,7 +192,7 @@ const parseTextSource = (sourceText) =>
     .filter(Boolean);
 
 const parseMenuSource = (sourceText = '') => {
-  const trimmed = sourceText.trim();
+  const trimmed = cleanImportedText(sourceText).trim();
 
   if (!trimmed) {
     return [];
@@ -199,11 +231,14 @@ router.get('/', async (req, res) => {
 // @desc    Add a new menu item
 router.post('/', auth, requireRole('RESTAURANT_ADMIN'), async (req, res) => {
   try {
+    const category = normalizeCategory(req.body.category);
     const newItem = new MenuItem({
       ...req.body,
+      category,
       restaurantId: req.user.restaurantId,
     });
     const item = await newItem.save();
+    await ensureCategoryExists(req.user.restaurantId, category);
     res.json(item);
   } catch (err) {
     console.error(err.message);
@@ -260,6 +295,11 @@ router.post('/import/commit', auth, requireRole('RESTAURANT_ADMIN'), async (req,
     }
 
     const createdItems = await MenuItem.insertMany(sanitizedItems);
+    await Promise.all(
+      Array.from(new Set(createdItems.map((item) => item.category))).map((category) =>
+        ensureCategoryExists(req.user.restaurantId, category)
+      )
+    );
     return res.status(201).json({ items: createdItems, importedCount: createdItems.length });
   } catch (err) {
     console.error(err.message);
@@ -271,14 +311,20 @@ router.post('/import/commit', auth, requireRole('RESTAURANT_ADMIN'), async (req,
 // @desc    Update a menu item
 router.put('/:id', auth, requireRole('RESTAURANT_ADMIN'), async (req, res) => {
   try {
+    const updates = { ...req.body };
+    if (updates.category !== undefined) {
+      updates.category = normalizeCategory(updates.category);
+    }
+
     const updatedItem = await MenuItem.findOneAndUpdate(
       { _id: req.params.id, restaurantId: req.user.restaurantId },
-      { $set: req.body },
+      { $set: updates },
       { new: true }
     );
     if (!updatedItem) {
       return res.status(404).json({ message: 'Menu item not found' });
     }
+    await ensureCategoryExists(req.user.restaurantId, updatedItem.category);
     res.json(updatedItem);
   } catch (err) {
     console.error(err.message);
