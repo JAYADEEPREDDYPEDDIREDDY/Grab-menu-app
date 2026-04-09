@@ -28,7 +28,7 @@ const menuItemSchema = new mongoose.Schema({
   },
   isVeg: {
     type: Boolean,
-    default: true,
+    default: null,
   },
   isPopular: {
     type: Boolean,

@@ -19,6 +19,7 @@ import CategoryRoundedIcon from '@mui/icons-material/CategoryRounded';
 import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded';
 import QrCode2RoundedIcon from '@mui/icons-material/QrCode2Rounded';
 import ReceiptLongRoundedIcon from '@mui/icons-material/ReceiptLongRounded';
+import ReviewsRoundedIcon from '@mui/icons-material/ReviewsRounded';
 import PaletteRoundedIcon from '@mui/icons-material/PaletteRounded';
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
 import StorefrontRoundedIcon from '@mui/icons-material/StorefrontRounded';
@@ -35,6 +36,7 @@ const navItems = [
   { label: 'Import Menu', path: '/admin/menu/import', icon: UploadFileRoundedIcon },
   { label: 'Tables & QR', path: '/admin/tables', icon: QrCode2RoundedIcon },
   { label: 'Billing', path: '/admin/billing', icon: ReceiptLongRoundedIcon },
+  { label: 'Feedback', path: '/admin/feedback', icon: ReviewsRoundedIcon },
   { label: 'Settings', path: '/admin/settings', icon: PaletteRoundedIcon },
 ];
 

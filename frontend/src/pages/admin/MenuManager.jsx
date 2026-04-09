@@ -35,7 +35,7 @@ const emptyForm = {
   category: 'Main Course',
   description: '',
   image: '',
-  isVeg: true,
+  isVeg: null,
   isPopular: false,
 };
 
@@ -268,6 +268,32 @@ export default function MenuManager() {
                     setFormData({ ...formData, image: event.target.value })
                   }
                 />
+                <FormControl>
+                  <InputLabel>Food Type</InputLabel>
+                  <Select
+                    label="Food Type"
+                    value={
+                      formData.isVeg === true
+                        ? 'veg'
+                        : formData.isVeg === false
+                          ? 'non-veg'
+                          : ''
+                    }
+                    onChange={(event) => {
+                      const nextValue =
+                        event.target.value === 'veg'
+                          ? true
+                          : event.target.value === 'non-veg'
+                            ? false
+                            : null;
+                      setFormData({ ...formData, isVeg: nextValue });
+                    }}
+                  >
+                    <MenuItem value="">None</MenuItem>
+                    <MenuItem value="veg">Veg</MenuItem>
+                    <MenuItem value="non-veg">Non-Veg</MenuItem>
+                  </Select>
+                </FormControl>
                 {categoryMode === 'new' ? (
                   <TextField
                     label="New Category"
@@ -291,17 +317,6 @@ export default function MenuManager() {
               </Box>
 
               <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={formData.isVeg}
-                      onChange={(event) =>
-                        setFormData({ ...formData, isVeg: event.target.checked })
-                      }
-                    />
-                  }
-                  label="Vegetarian"
-                />
                 <FormControlLabel
                   control={
                     <Switch
@@ -358,8 +373,10 @@ export default function MenuManager() {
                     <Stack spacing={0.75}>
                       <Stack direction="row" spacing={1} alignItems="center">
                         <Typography sx={{ fontWeight: 700 }}>{item.name}</Typography>
-                        {item.isVeg ? (
+                        {item.isVeg === true ? (
                           <Chip label="Veg" size="small" color="success" />
+                        ) : item.isVeg === false ? (
+                          <Chip label="Non-Veg" size="small" color="error" />
                         ) : null}
                         {item.isPopular ? (
                           <Chip

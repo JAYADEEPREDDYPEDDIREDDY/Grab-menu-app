@@ -30,6 +30,7 @@ import MergeRoundedIcon from '@mui/icons-material/MergeRounded';
 import PaymentsRoundedIcon from '@mui/icons-material/PaymentsRounded';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded';
+import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
 import { SOCKET_BASE_URL, getApiUrl } from '../../config/api';
 
 const RS = '\u20B9';
@@ -47,7 +48,195 @@ const historyRanges = [
 
 const money = (value) => `${RS}${Number(value || 0).toFixed(2)}`;
 
-function BillDetailsDialog({ bill, open, onClose, onApproveCash, onMarkPaid, submitting }) {
+const escapeHtml = (value) =>
+  String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const getBillFileName = (bill) => {
+  const joinedTables = (bill.tableIds || [])
+    .map((table) => table.tableNumber)
+    .filter(Boolean)
+    .join('-');
+
+  return `bill-${joinedTables || 'receipt'}-${bill._id || Date.now()}.html`;
+};
+
+const buildBillDownloadMarkup = (bill) => {
+  const tableLabel = (bill.tableIds || [])
+    .map((table) => `Table ${table.tableNumber}`)
+    .join(', ');
+
+  const rows = (bill.lineItems || [])
+    .map(
+      (item) => `
+        <tr>
+          <td>${escapeHtml(item.name)}</td>
+          <td>${escapeHtml(item.quantity)}</td>
+          <td>${escapeHtml(money(item.unitPrice))}</td>
+          <td style="text-align:right;">${escapeHtml(money(item.totalPrice))}</td>
+        </tr>
+      `
+    )
+    .join('');
+
+  const feedbackMarkup = bill.feedback
+    ? `
+      <section class="section">
+        <h2>Customer Feedback</h2>
+        <p><strong>Rating:</strong> ${escapeHtml(`${bill.feedback.rating || 0}/5`)}</p>
+        <p><strong>Guest:</strong> ${escapeHtml(bill.feedback.customerName || 'Anonymous')}</p>
+        <p><strong>Submitted:</strong> ${escapeHtml(
+          new Date(bill.feedback.submittedAt || bill.updatedAt || bill.createdAt).toLocaleString()
+        )}</p>
+        <p><strong>Comment:</strong> ${escapeHtml(
+          bill.feedback.comment || 'The guest submitted a rating without any comment.'
+        )}</p>
+      </section>
+    `
+    : '';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bill Receipt</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 32px;
+        background: #f7f3ef;
+        color: #1f1a17;
+      }
+      .receipt {
+        max-width: 760px;
+        margin: 0 auto;
+        background: #ffffff;
+        border-radius: 20px;
+        padding: 32px;
+        box-shadow: 0 12px 40px rgba(31, 26, 23, 0.12);
+      }
+      h1, h2, p {
+        margin: 0;
+      }
+      .header,
+      .meta,
+      .total-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: center;
+      }
+      .meta,
+      .summary,
+      .section {
+        margin-top: 24px;
+      }
+      .badge {
+        display: inline-block;
+        padding: 6px 12px;
+        border-radius: 999px;
+        background: #ffe8d4;
+        color: #a34b00;
+        font-weight: 700;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 16px;
+      }
+      th, td {
+        padding: 12px 0;
+        border-bottom: 1px solid #eadfd6;
+        text-align: left;
+      }
+      .summary p,
+      .section p {
+        margin-top: 8px;
+      }
+      .total-row {
+        font-size: 20px;
+        font-weight: 700;
+        margin-top: 12px;
+      }
+      @media print {
+        body {
+          padding: 0;
+          background: #fff;
+        }
+        .receipt {
+          box-shadow: none;
+          border-radius: 0;
+          max-width: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="receipt">
+      <div class="header">
+        <div>
+          <h1>Bill Receipt</h1>
+          <p>${escapeHtml(tableLabel || 'Table bill')}</p>
+        </div>
+        <span class="badge">${escapeHtml(bill.paymentStatusLabel || bill.paymentStatus || 'Pending')}</span>
+      </div>
+
+      <div class="meta">
+        <p><strong>Created:</strong> ${escapeHtml(new Date(bill.createdAt).toLocaleString())}</p>
+        <p><strong>Method:</strong> ${escapeHtml(bill.paymentMethod || 'Not selected')}</p>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Qty</th>
+            <th>Price</th>
+            <th style="text-align:right;">Total</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+
+      <section class="summary">
+        <p><strong>Subtotal:</strong> ${escapeHtml(money(bill.subtotal))}</p>
+        <p><strong>GST (${escapeHtml(bill.gstRate)}%):</strong> ${escapeHtml(money(bill.gstAmount))}</p>
+        <p><strong>Service Charge (${escapeHtml(bill.serviceChargeRate)}%):</strong> ${escapeHtml(money(bill.serviceChargeAmount))}</p>
+        ${bill.notes ? `<p><strong>Notes:</strong> ${escapeHtml(bill.notes)}</p>` : ''}
+        <div class="total-row">
+          <span>Total</span>
+          <span>${escapeHtml(money(bill.totalAmount))}</span>
+        </div>
+      </section>
+
+      ${feedbackMarkup}
+    </main>
+  </body>
+</html>`;
+};
+
+const downloadBill = (bill) => {
+  if (!bill || typeof window === 'undefined') return;
+
+  const markup = buildBillDownloadMarkup(bill);
+  const blob = new Blob([markup], { type: 'text/html;charset=utf-8' });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = getBillFileName(bill);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
+};
+
+function BillDetailsDialog({ bill, open, onClose, onApproveCash, onMarkPaid, onDownload, submitting }) {
   if (!bill) return null;
 
   return (
@@ -137,6 +326,13 @@ function BillDetailsDialog({ bill, open, onClose, onApproveCash, onMarkPaid, sub
           </Card>
 
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} justifyContent="flex-end">
+            <Button
+              variant="outlined"
+              startIcon={<DownloadRoundedIcon />}
+              onClick={() => onDownload(bill)}
+            >
+              Download Bill
+            </Button>
             {bill.paymentStatus === 'AWAITING_APPROVAL' ? (
               <Button
                 variant="contained"
@@ -445,62 +641,6 @@ export default function Billing() {
       ) : (
         <>
           <Card sx={{ backgroundColor: '#1A1715', borderRadius: '20px', p: 3 }}>
-            <Stack direction={{ xs: 'column', lg: 'row' }} spacing={2} justifyContent="space-between">
-              <Box>
-                <Typography variant="h6" sx={{ mb: 0.75 }}>Generate Bills</Typography>
-                <Typography color="text.secondary">Create single-table or combined bills from ready/completed orders.</Typography>
-              </Box>
-              <Button
-                variant="contained"
-                startIcon={<MergeRoundedIcon />}
-                disabled={submitting || selectedTableIds.length < 2}
-                onClick={() => generateBill('/api/billing/combine', selectedTableIds)}
-              >
-                Combine Tables
-              </Button>
-            </Stack>
-
-            <Box sx={{ mt: 2.5, display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2,minmax(0,1fr))', xl: 'repeat(4,minmax(0,1fr))' }, gap: 2.5 }}>
-              {tables.map((table) => (
-                <Card key={table._id} sx={{ backgroundColor: '#221F1C', borderRadius: '18px', p: 2.25, border: selectedTableIds.includes(table._id) ? '1px solid rgba(255,140,43,0.55)' : '1px solid rgba(255,255,255,0.04)' }}>
-                  <Stack spacing={1.5}>
-                    <Stack direction="row" justifyContent="space-between" alignItems="center">
-                      <Typography variant="h6">Table {table.tableNumber}</Typography>
-                      <Chip size="small" label={`Cap ${table.capacity || 4}`} sx={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
-                    </Stack>
-                    <Typography color="text.secondary">{table.billableOrderCount} ready/completed order{table.billableOrderCount === 1 ? '' : 's'}</Typography>
-                    <Typography sx={{ color: '#FF8C2B', fontWeight: 700 }}>{money(table.billableAmount)}</Typography>
-                    <Stack direction="row" spacing={1}>
-                      <Button
-                        size="small"
-                        variant={selectedTableIds.includes(table._id) ? 'contained' : 'outlined'}
-                        onClick={() =>
-                          setSelectedTableIds((current) =>
-                            current.includes(table._id)
-                              ? current.filter((id) => id !== table._id)
-                              : [...current, table._id]
-                          )
-                        }
-                      >
-                        {selectedTableIds.includes(table._id) ? 'Selected' : 'Select'}
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="contained"
-                        startIcon={<ReceiptLongRoundedIcon />}
-                        disabled={submitting || table.billableOrderCount === 0 || table.hasActiveBill}
-                        onClick={() => generateBill('/api/billing/generate', [table._id])}
-                      >
-                        {table.hasActiveBill ? 'Active Bill' : 'Generate'}
-                      </Button>
-                    </Stack>
-                  </Stack>
-                </Card>
-              ))}
-            </Box>
-          </Card>
-
-          <Card sx={{ backgroundColor: '#1A1715', borderRadius: '20px', p: 3 }}>
             <Tabs value={tab} onChange={(_, nextValue) => setTab(nextValue)} textColor="inherit" indicatorColor="secondary" sx={{ mb: 2 }}>
               <Tab value="active" label={`Active Bills (${activeBills.length})`} />
               <Tab value="approval" label={`Awaiting Approval (${awaitingApproval.length})`} />
@@ -669,6 +809,62 @@ export default function Billing() {
               )
             ) : null}
           </Card>
+
+          <Card sx={{ backgroundColor: '#1A1715', borderRadius: '20px', p: 3 }}>
+            <Stack direction={{ xs: 'column', lg: 'row' }} spacing={2} justifyContent="space-between">
+              <Box>
+                <Typography variant="h6" sx={{ mb: 0.75 }}>Generate Bills</Typography>
+                <Typography color="text.secondary">Create single-table or combined bills from ready/completed orders.</Typography>
+              </Box>
+              <Button
+                variant="contained"
+                startIcon={<MergeRoundedIcon />}
+                disabled={submitting || selectedTableIds.length < 2}
+                onClick={() => generateBill('/api/billing/combine', selectedTableIds)}
+              >
+                Combine Tables
+              </Button>
+            </Stack>
+
+            <Box sx={{ mt: 2.5, display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2,minmax(0,1fr))', xl: 'repeat(4,minmax(0,1fr))' }, gap: 2.5 }}>
+              {tables.map((table) => (
+                <Card key={table._id} sx={{ backgroundColor: '#221F1C', borderRadius: '18px', p: 2.25, border: selectedTableIds.includes(table._id) ? '1px solid rgba(255,140,43,0.55)' : '1px solid rgba(255,255,255,0.04)' }}>
+                  <Stack spacing={1.5}>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center">
+                      <Typography variant="h6">Table {table.tableNumber}</Typography>
+                      <Chip size="small" label={`Cap ${table.capacity || 4}`} sx={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
+                    </Stack>
+                    <Typography color="text.secondary">{table.billableOrderCount} ready/completed order{table.billableOrderCount === 1 ? '' : 's'}</Typography>
+                    <Typography sx={{ color: '#FF8C2B', fontWeight: 700 }}>{money(table.billableAmount)}</Typography>
+                    <Stack direction="row" spacing={1}>
+                      <Button
+                        size="small"
+                        variant={selectedTableIds.includes(table._id) ? 'contained' : 'outlined'}
+                        onClick={() =>
+                          setSelectedTableIds((current) =>
+                            current.includes(table._id)
+                              ? current.filter((id) => id !== table._id)
+                              : [...current, table._id]
+                          )
+                        }
+                      >
+                        {selectedTableIds.includes(table._id) ? 'Selected' : 'Select'}
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        startIcon={<ReceiptLongRoundedIcon />}
+                        disabled={submitting || table.billableOrderCount === 0 || table.hasActiveBill}
+                        onClick={() => generateBill('/api/billing/generate', [table._id])}
+                      >
+                        {table.hasActiveBill ? 'Active Bill' : 'Generate'}
+                      </Button>
+                    </Stack>
+                  </Stack>
+                </Card>
+              ))}
+            </Box>
+          </Card>
         </>
       )}
 
@@ -678,6 +874,7 @@ export default function Billing() {
         onClose={() => setActiveBill(null)}
         onApproveCash={(bill) => updateBillStatus(bill, `/api/payment/approve-cash/${bill._id}`)}
         onMarkPaid={(bill) => updateBillStatus(bill, `/api/billing/mark-paid/${bill._id}`)}
+        onDownload={downloadBill}
         submitting={submitting}
       />
     </Stack>

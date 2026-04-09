@@ -90,6 +90,7 @@ export default function CartDrawer({
   orderingDisabled,
   onSessionUpdate,
   onStartSession,
+  onOrderPlaced,
 }) {
   const { cart, cartTotal, updateQuantity, removeFromCart, clearCart } = useCart();
   const [customerName, setCustomerName] = useState('');
@@ -198,8 +199,12 @@ export default function CartDrawer({
         throw new Error(data.message || 'Failed to place order');
       }
 
+      const placedOrder = data?.order || data;
+      const updatedSession = data?.session || activeSession;
+
       clearCart();
-      onSessionUpdate?.(activeSession);
+      onSessionUpdate?.(updatedSession);
+      onOrderPlaced?.(placedOrder);
       setStatusMessage(`Order placed successfully for Table ${tableId}. You can continue ordering anytime.`);
       onClose();
     } catch (error) {
@@ -261,11 +266,12 @@ export default function CartDrawer({
               </div>
             ) : null}
 
-            {!session ? (
-              <div className="cart-drawer-empty-session">
-                Add items and place your order. The table session will start automatically.
-              </div>
-            ) : cart.length === 0 ? (
+            {cart.length === 0 ? (
+              !session ? (
+                <div className="cart-drawer-empty-session">
+                  Add items and place your order. The table session will start automatically.
+                </div>
+              ) : (
               <div className="cart-drawer-empty">
                 <div className="cart-drawer-empty-icon">
                   <ShoppingBag size={34} className="cart-drawer-empty-icon-svg" />
@@ -275,6 +281,7 @@ export default function CartDrawer({
                   <p className="cart-drawer-empty-subtitle">Add something delicious to get started.</p>
                 </div>
               </div>
+              )
             ) : (
               <div className="cart-items">
                 {cart.map((item) => (

@@ -7,13 +7,11 @@ import {
   Button,
   Card,
   FormControl,
-  FormControlLabel,
   InputLabel,
   LinearProgress,
   MenuItem,
   Select,
   Stack,
-  Switch,
   TextField,
   Typography,
 } from '@mui/material';
@@ -507,6 +505,34 @@ export default function MenuImport() {
                         handleItemChange(index, 'description', event.target.value)
                       }
                     />
+                    <FormControl>
+                      <InputLabel>Food Type</InputLabel>
+                      <Select
+                        label="Food Type"
+                        value={
+                          item.isVeg === true
+                            ? 'veg'
+                            : item.isVeg === false
+                              ? 'non-veg'
+                              : ''
+                        }
+                        onChange={(event) =>
+                          handleItemChange(
+                            index,
+                            'isVeg',
+                            event.target.value === 'veg'
+                              ? true
+                              : event.target.value === 'non-veg'
+                                ? false
+                                : null
+                          )
+                        }
+                      >
+                        <MenuItem value="">None</MenuItem>
+                        <MenuItem value="veg">Veg</MenuItem>
+                        <MenuItem value="non-veg">Non-Veg</MenuItem>
+                      </Select>
+                    </FormControl>
                     {item._categoryMode === 'new' ? (
                       <TextField
                         label="New Category"
@@ -530,28 +556,19 @@ export default function MenuImport() {
                   </Box>
 
                   <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mt: 2 }}>
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          checked={Boolean(item.isVeg)}
-                          onChange={(event) =>
-                            handleItemChange(index, 'isVeg', event.target.checked)
-                          }
-                        />
-                      }
-                      label="Vegetarian"
-                    />
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          checked={Boolean(item.isPopular)}
-                          onChange={(event) =>
-                            handleItemChange(index, 'isPopular', event.target.checked)
-                          }
-                        />
-                      }
-                      label="Popular"
-                    />
+                    <FormControl>
+                      <InputLabel>Popular</InputLabel>
+                      <Select
+                        label="Popular"
+                        value={item.isPopular ? 'yes' : 'no'}
+                        onChange={(event) =>
+                          handleItemChange(index, 'isPopular', event.target.value === 'yes')
+                        }
+                      >
+                        <MenuItem value="no">No</MenuItem>
+                        <MenuItem value="yes">Yes</MenuItem>
+                      </Select>
+                    </FormControl>
                   </Stack>
                 </Card>
               ))}

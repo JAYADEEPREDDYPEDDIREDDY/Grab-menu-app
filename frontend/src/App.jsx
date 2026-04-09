@@ -14,6 +14,7 @@ import CategoryManager from './pages/admin/CategoryManager';
 import MenuImport from './pages/admin/MenuImport';
 import TableManager from './pages/admin/TableManager';
 import Billing from './pages/admin/Billing';
+import Feedback from './pages/admin/Feedback';
 import RestaurantSettings from './pages/admin/RestaurantSettings';
 import SuperAdminLogin from './pages/admin/SuperAdminLogin';
 import SuperAdminDashboard from './pages/admin/SuperAdminDashboard';
@@ -139,6 +140,16 @@ function App() {
                 <ProtectedRoute allowedRoles={['RESTAURANT_ADMIN']} loginPath="/admin/login">
                   <AdminLayout>
                     <Billing />
+                  </AdminLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/feedback"
+              element={
+                <ProtectedRoute allowedRoles={['RESTAURANT_ADMIN']} loginPath="/admin/login">
+                  <AdminLayout>
+                    <Feedback />
                   </AdminLayout>
                 </ProtectedRoute>
               }

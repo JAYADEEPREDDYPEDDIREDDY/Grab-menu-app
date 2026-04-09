@@ -49,6 +49,35 @@ const ensureCategoryExists = async (restaurantId, categoryName) => {
   );
 };
 
+const normalizeIsVeg = (value, fallback = true) => {
+  if (value === null) {
+    return null;
+  }
+
+  if (value === undefined || value === '') {
+    return fallback;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['neutral', 'neither', 'null', 'none', 'na', 'n/a'].includes(normalized)) {
+      return null;
+    }
+    if (['veg', 'vegetarian', 'true', 'yes', '1'].includes(normalized)) {
+      return true;
+    }
+    if (['non-veg', 'non veg', 'nonveg', 'false', 'no', '0'].includes(normalized)) {
+      return false;
+    }
+  }
+
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  return fallback;
+};
+
 const buildPreviewItem = ({
   name,
   price,
@@ -66,7 +95,7 @@ const buildPreviewItem = ({
     price: Number(price.toFixed(2)),
     category: normalizeCategory(category),
     description: description.trim(),
-    isVeg,
+    isVeg: normalizeIsVeg(isVeg),
     isPopular,
     image: '',
   };
@@ -85,7 +114,7 @@ const parseJsonSource = (sourceText) => {
         price: Number(item.price),
         category: item.category,
         description: item.description || '',
-        isVeg: item.isVeg ?? true,
+        isVeg: normalizeIsVeg(item.isVeg),
         isPopular: item.isPopular ?? false,
       })
     )
@@ -122,7 +151,7 @@ const parseCsvSource = (sourceText) => {
         price: Number(record.price),
         category: record.category,
         description: record.description || '',
-        isVeg: record.isveg ? record.isveg.toLowerCase() !== 'false' : true,
+        isVeg: normalizeIsVeg(record.isveg),
         isPopular: record.ispopular ? record.ispopular.toLowerCase() === 'true' : false,
       });
     })
@@ -311,9 +340,12 @@ router.post('/import/commit', auth, requireRole('RESTAURANT_ADMIN'), async (req,
 // @desc    Update a menu item
 router.put('/:id', auth, requireRole('RESTAURANT_ADMIN'), async (req, res) => {
   try {
-    const updates = { ...req.body };
+      const updates = { ...req.body };
     if (updates.category !== undefined) {
       updates.category = normalizeCategory(updates.category);
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'isVeg')) {
+      updates.isVeg = normalizeIsVeg(updates.isVeg);
     }
 
     const updatedItem = await MenuItem.findOneAndUpdate(

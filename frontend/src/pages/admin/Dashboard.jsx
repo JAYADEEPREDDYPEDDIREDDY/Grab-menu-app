@@ -34,6 +34,7 @@ import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import LunchDiningRoundedIcon from '@mui/icons-material/LunchDiningRounded';
 import PointOfSaleRoundedIcon from '@mui/icons-material/PointOfSaleRounded';
 import CircleRoundedIcon from '@mui/icons-material/CircleRounded';
+import VolumeUpRoundedIcon from '@mui/icons-material/VolumeUpRounded';
 import { SOCKET_BASE_URL, getApiUrl } from '../../config/api';
 
 const columns = [
@@ -96,6 +97,77 @@ const isSameDay = (leftDate, rightDate) =>
   leftDate.getFullYear() === rightDate.getFullYear() &&
   leftDate.getMonth() === rightDate.getMonth() &&
   leftDate.getDate() === rightDate.getDate();
+
+const createTonePlayer = () => {
+  let audioContext = null;
+
+  const ensureContext = () => {
+    if (typeof window === 'undefined') return null;
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return null;
+
+    if (!audioContext) {
+      audioContext = new AudioContextClass();
+    }
+
+    return audioContext;
+  };
+
+  const playSequence = async (steps) => {
+    const context = ensureContext();
+    if (!context) return false;
+
+    if (context.state === 'suspended') {
+      await context.resume();
+    }
+
+    const now = context.currentTime + 0.02;
+
+    steps.forEach((step, index) => {
+      const startAt = now + index * step.gap;
+      const oscillator = context.createOscillator();
+      const gainNode = context.createGain();
+
+      oscillator.type = step.type || 'sine';
+      oscillator.frequency.setValueAtTime(step.frequency, startAt);
+
+      gainNode.gain.setValueAtTime(0.0001, startAt);
+      gainNode.gain.exponentialRampToValueAtTime(step.volume ?? 0.16, startAt + 0.01);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, startAt + step.duration);
+
+      oscillator.connect(gainNode);
+      gainNode.connect(context.destination);
+      oscillator.start(startAt);
+      oscillator.stop(startAt + step.duration + 0.03);
+    });
+
+    return true;
+  };
+
+  return {
+    unlock: async () => {
+      const context = ensureContext();
+      if (!context) return false;
+
+      if (context.state === 'suspended') {
+        await context.resume();
+      }
+
+      return context.state === 'running';
+    },
+    playNewOrder: () =>
+      playSequence([
+        { frequency: 784, duration: 0.16, gap: 0.18, type: 'triangle', volume: 0.12 },
+        { frequency: 1046, duration: 0.2, gap: 0.18, type: 'triangle', volume: 0.16 },
+      ]),
+    playPaymentRequest: () =>
+      playSequence([
+        { frequency: 587, duration: 0.2, gap: 0.22, type: 'square', volume: 0.1 },
+        { frequency: 587, duration: 0.2, gap: 0.22, type: 'square', volume: 0.1 },
+        { frequency: 440, duration: 0.28, gap: 0.22, type: 'square', volume: 0.08 },
+      ]),
+  };
+};
 
 function formatOrderId(order) {
   const value = order._id?.slice(-4) || '0';
@@ -233,7 +305,7 @@ function SortableOrderCard({ order, onAdvance }) {
   );
 }
 
-function KanbanColumn({ column, orders, badge, onAdvance }) {
+function KanbanColumn({ column, orders, badge, onAdvance, onClearCompleted, clearingCompleted }) {
   const { setNodeRef } = useDroppable({
     id: column.key,
   });
@@ -265,7 +337,18 @@ function KanbanColumn({ column, orders, badge, onAdvance }) {
               }}
             />
             {column.key === 'Completed' ? (
-              <Typography sx={{ color: 'text.secondary', fontSize: 14 }}>Ready to bill</Typography>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Typography sx={{ color: 'text.secondary', fontSize: 14 }}>Ready to bill</Typography>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="success"
+                  disabled={!orders.length || clearingCompleted}
+                  onClick={onClearCompleted}
+                >
+                  {clearingCompleted ? 'Clearing...' : 'Clear'}
+                </Button>
+              </Stack>
             ) : null}
           </Stack>
         </Stack>
@@ -306,6 +389,7 @@ export default function Dashboard() {
   const { token, restaurant, user, refreshRestaurant } = useAuth();
   const [orders, setOrders] = useState([]);
   const [activeBills, setActiveBills] = useState([]);
+  const [feedbackBills, setFeedbackBills] = useState([]);
   const [sessionOverview, setSessionOverview] = useState({
     counts: { active: 0, locked: 0, billing: 0 },
     sessions: [],
@@ -315,9 +399,51 @@ export default function Dashboard() {
   const [incomingAlert, setIncomingAlert] = useState(null);
   const [releasingSessionId, setReleasingSessionId] = useState('');
   const [processingPaymentBillId, setProcessingPaymentBillId] = useState('');
+  const [clearingCompleted, setClearingCompleted] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const restaurantId = user?.restaurantId;
   const knownOrderIdsRef = useRef(new Set());
+  const tonePlayerRef = useRef(null);
+
+  if (!tonePlayerRef.current) {
+    tonePlayerRef.current = createTonePlayer();
+  }
+
+  const unlockNotificationSound = useCallback(async () => {
+    const unlocked = await tonePlayerRef.current?.unlock();
+    if (unlocked) {
+      setSoundEnabled(true);
+    }
+  }, []);
+
+  const playNotificationTone = useCallback(
+    async (toneType) => {
+      const player = tonePlayerRef.current;
+      if (!player) return;
+
+      try {
+        const didUnlock = await player.unlock();
+        if (didUnlock && !soundEnabled) {
+          setSoundEnabled(true);
+        }
+
+        if (!didUnlock) {
+          return;
+        }
+
+        if (toneType === 'payment') {
+          await player.playPaymentRequest();
+          return;
+        }
+
+        await player.playNewOrder();
+      } catch (error) {
+        console.error(error);
+      }
+    },
+    [soundEnabled]
+  );
 
   const showIncomingOrderNotification = (order) => {
     const tableNumber = order.tableId?.tableNumber || '-';
@@ -331,6 +457,8 @@ export default function Dashboard() {
       title: 'New order received',
       message,
     });
+
+    playNotificationTone('order');
 
     if (typeof document !== 'undefined') {
       document.title = `New Order ${TITLE_SEPARATOR} ${restaurant?.name || 'Dashboard'}`;
@@ -362,6 +490,8 @@ export default function Dashboard() {
       message: `Table ${payload.tableNumber || '-'} is waiting for cash collection.`,
       severity: 'warning',
     });
+
+    playNotificationTone('payment');
   };
 
   const fetchOrders = useCallback(
@@ -423,6 +553,23 @@ export default function Dashboard() {
 
       const data = await res.json();
       setActiveBills(Array.isArray(data.activeBills) ? data.activeBills : []);
+      const nextFeedbackBills = [
+        ...(Array.isArray(data.activeBills) ? data.activeBills : []),
+        ...(Array.isArray(data.awaitingApproval) ? data.awaitingApproval : []),
+        ...(Array.isArray(data.history) ? data.history : []),
+      ]
+        .filter((bill) => bill?._id && bill?.feedback)
+        .sort(
+          (left, right) =>
+            new Date(right.feedback?.submittedAt || right.updatedAt || right.createdAt).getTime() -
+            new Date(left.feedback?.submittedAt || left.updatedAt || left.createdAt).getTime()
+        );
+
+      setFeedbackBills(
+        nextFeedbackBills.filter(
+          (bill, index, list) => list.findIndex((entry) => entry._id === bill._id) === index
+        )
+      );
     } catch (error) {
       console.error(error);
     }
@@ -511,6 +658,14 @@ export default function Dashboard() {
       }
       fetchBillingOverview();
       fetchSessionOverview();
+    });
+
+    socket.on('ordersCleared', (payload) => {
+      if (String(payload.restaurantId) !== String(restaurantId)) {
+        return;
+      }
+
+      fetchOrders();
     });
 
     const scheduleNextDayRefresh = () => {
@@ -682,6 +837,54 @@ export default function Dashboard() {
     }
   };
 
+  const clearCompletedOrders = async () => {
+    const clearLocally = (message, severity = 'success') => {
+      setOrders((current) =>
+        current.filter((order) => !statusByColumn.Completed.includes(order.status))
+      );
+      setIncomingAlert({
+        key: `clear-completed-${Date.now()}`,
+        title: severity === 'warning' ? 'Cleared for now' : 'Ready / completed cleared',
+        message,
+        severity,
+      });
+    };
+
+    try {
+      setClearingCompleted(true);
+      const response = await fetch(getApiUrl('/api/orders/clear-live-completed'), {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (response.status === 404) {
+          clearLocally(
+            'Ready and completed orders were cleared from the board for now. Restart the backend to enable permanent clearing.',
+            'warning'
+          );
+          return;
+        }
+        throw new Error(data.message || 'Failed to clear ready/completed orders');
+      }
+
+      clearLocally(
+        data.message || 'Ready and completed orders were removed from the live board.'
+      );
+    } catch (error) {
+      console.error(error);
+      clearLocally(
+        'Ready and completed orders were cleared from the board for now, but the backend clear route is not available yet.',
+        'warning'
+      );
+    } finally {
+      setClearingCompleted(false);
+    }
+  };
+
   const findColumnKeyForStatus = (status) =>
     columns.find((column) => statusByColumn[column.key].includes(status))?.key || 'Pending';
 
@@ -796,6 +999,25 @@ export default function Dashboard() {
                 '& .MuiChip-label': { fontWeight: 700, px: 0.75 },
               }}
             />
+          </Stack>
+
+          <Stack direction="row" spacing={1.25} useFlexGap flexWrap="wrap" sx={{ mt: 2 }}>
+            <Chip
+              icon={<VolumeUpRoundedIcon sx={{ fontSize: 18 }} />}
+              label={soundEnabled ? 'Notification sound on' : 'Click to enable notification sound'}
+              onClick={unlockNotificationSound}
+              clickable
+              sx={{
+                height: 42,
+                borderRadius: '999px',
+                backgroundColor: soundEnabled ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.05)',
+                color: soundEnabled ? '#86EFAC' : '#FFFFFF',
+                '& .MuiChip-label': { fontWeight: 700 },
+              }}
+            />
+            <Typography sx={{ color: 'text.secondary', fontSize: 14, alignSelf: 'center' }}>
+              New orders and cash requests now play a short alert tone.
+            </Typography>
           </Stack>
 
           <Box
@@ -923,6 +1145,87 @@ export default function Dashboard() {
               </Typography>
             )}
           </Card>
+
+          {false ? <Card
+            sx={{
+              mt: 3,
+              p: 2.25,
+              borderRadius: '18px',
+              backgroundColor: '#221F1C',
+            }}
+          >
+              <Stack spacing={1.75}>
+              <Stack direction="row" justifyContent="space-between" alignItems="center">
+                <Typography variant="h6">Recent Customer Feedback from Live Orders</Typography>
+                <Chip
+                  label={`${feedbackBills.length} feedback`}
+                  size="small"
+                  sx={{
+                    backgroundColor: 'rgba(255,255,255,0.06)',
+                    color: '#FFFFFF',
+                  }}
+                />
+              </Stack>
+
+              {feedbackBills.length ? (
+                <Stack spacing={1.25}>
+                  {feedbackBills.slice(0, 5).map((bill) => (
+                    <Box
+                      key={bill._id}
+                      sx={{
+                        borderRadius: '14px',
+                        px: 1.75,
+                        py: 1.5,
+                        backgroundColor: 'rgba(255,255,255,0.03)',
+                      }}
+                    >
+                      <Stack
+                        direction={{ xs: 'column', md: 'row' }}
+                        justifyContent="space-between"
+                        spacing={1}
+                      >
+                        <Box>
+                          <Typography sx={{ fontWeight: 700 }}>
+                            Table {(bill.tableIds || []).map((table) => table.tableNumber).join(', ')}
+                          </Typography>
+                          <Typography sx={{ color: '#FFB067', fontWeight: 700, fontSize: 14, mt: 0.4 }}>
+                            {'★'.repeat(Number(bill.feedback?.rating || 0))}
+                            {'☆'.repeat(Math.max(5 - Number(bill.feedback?.rating || 0), 0))}
+                          </Typography>
+                          <Typography sx={{ color: 'text.secondary', fontSize: 13, mt: 0.6 }}>
+                            {bill.feedback?.customerName || 'Anonymous'}
+                          </Typography>
+                        </Box>
+
+                        <Box sx={{ maxWidth: 520 }}>
+                          <Typography sx={{ color: '#F5EDE6', fontSize: 14, lineHeight: 1.6 }}>
+                            {bill.feedback?.comment || 'Rating submitted without a written comment.'}
+                          </Typography>
+                          <Typography sx={{ color: '#FFCCA5', fontSize: 13, mt: 0.9 }}>
+                            Items ordered:{' '}
+                            {(bill.lineItems || []).length
+                              ? bill.lineItems
+                                  .map((item) => `${item.quantity}x ${item.name}`)
+                                  .join(', ')
+                              : 'No item details available.'}
+                          </Typography>
+                          <Typography sx={{ color: 'text.secondary', fontSize: 12, mt: 0.75 }}>
+                            {new Date(
+                              bill.feedback?.submittedAt || bill.updatedAt || bill.createdAt
+                            ).toLocaleString()}
+                          </Typography>
+                        </Box>
+                      </Stack>
+                    </Box>
+                  ))}
+                </Stack>
+              ) : (
+                <Typography color="text.secondary">
+                  No customer feedback has been submitted yet.
+                </Typography>
+              )}
+            </Stack>
+          </Card> : null}
         </Card>
 
         <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragEnd={handleDragEnd}>
@@ -940,6 +1243,8 @@ export default function Dashboard() {
                 orders={getColumnOrders(column.key)}
                 badge={getColumnOrders(column.key).length}
                 onAdvance={updateOrderStatus}
+                onClearCompleted={clearCompletedOrders}
+                clearingCompleted={clearingCompleted}
               />
             ))}
           </Box>

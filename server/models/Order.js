@@ -36,7 +36,12 @@ const orderSchema = new mongoose.Schema({
     type: String,
     enum: ['Pending', 'Preparing', 'Ready', 'Completed'],
     default: 'Pending',
-  }
+  },
+  isArchivedFromLiveBoard: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Order', orderSchema);

@@ -11,7 +11,10 @@ const { requireRole } = require('../middleware/auth.middleware');
 // @desc    Get all orders (for admin)
 router.get('/', auth, requireRole('RESTAURANT_ADMIN'), async (req, res) => {
   try {
-    const orders = await Order.find({ restaurantId: req.user.restaurantId })
+    const orders = await Order.find({
+      restaurantId: req.user.restaurantId,
+      isArchivedFromLiveBoard: { $ne: true },
+    })
       .populate('tableId')
       .populate('items.menuItemId')
       .sort({ createdAt: -1 });
@@ -130,18 +133,21 @@ router.post('/', async (req, res) => {
     const populatedOrder = await Order.findById(order._id).populate('tableId').populate('items.menuItemId');
 
     session.orders.push(order._id);
+    session.cartItems = [];
     if (payload.customerName) {
       session.customerName = String(payload.customerName).trim();
     }
     session.lastActivityAt = new Date();
     await session.save();
+    const populatedSession = await TableSession.findById(session._id).populate('tableId');
     
     // Emit via socket io to admin
     const io = req.app.get('io');
     io.emit('newOrder', populatedOrder);
-    io.emit('sessionUpdate', await TableSession.findById(session._id).populate('tableId'));
+    io.emit('orderStatusUpdate', populatedOrder);
+    io.emit('sessionUpdate', populatedSession);
 
-    res.json(populatedOrder);
+    res.json({ order: populatedOrder, session: populatedSession });
   } catch (err) {
     console.error(err.message);
     if (err.name === 'ValidationError' || err.name === 'CastError') {
@@ -158,7 +164,7 @@ router.put('/:id/status', auth, requireRole('RESTAURANT_ADMIN'), async (req, res
     const { status } = req.body;
     const order = await Order.findOneAndUpdate(
       { _id: req.params.id, restaurantId: req.user.restaurantId },
-      { status },
+      { status, isArchivedFromLiveBoard: false },
       { new: true }
     )
       .populate('tableId')
@@ -172,6 +178,35 @@ router.put('/:id/status', auth, requireRole('RESTAURANT_ADMIN'), async (req, res
     io.emit('orderStatusUpdate', order);
 
     res.json(order);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
+
+router.patch('/clear-live-completed', auth, requireRole('RESTAURANT_ADMIN'), async (req, res) => {
+  try {
+    const result = await Order.updateMany(
+      {
+        restaurantId: req.user.restaurantId,
+        status: { $in: ['Ready', 'Completed'] },
+        isArchivedFromLiveBoard: { $ne: true },
+      },
+      {
+        $set: { isArchivedFromLiveBoard: true },
+      }
+    );
+
+    const io = req.app.get('io');
+    io.emit('ordersCleared', {
+      restaurantId: req.user.restaurantId,
+      statuses: ['Ready', 'Completed'],
+    });
+
+    res.json({
+      message: 'Ready and completed orders cleared from live board.',
+      modifiedCount: result.modifiedCount || 0,
+    });
   } catch (err) {
     console.error(err.message);
     res.status(500).json({ message: 'Server Error' });
