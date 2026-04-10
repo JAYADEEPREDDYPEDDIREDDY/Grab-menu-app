@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useCart } from '../context/CartContext';
 import {
   ArrowRight,
+  Mail,
   Minus,
   Plus,
   ShoppingBag,
+  Smartphone,
   Trash2,
   UserRound,
   X,
@@ -94,6 +96,8 @@ export default function CartDrawer({
 }) {
   const { cart, cartTotal, updateQuantity, removeFromCart, clearCart } = useCart();
   const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [billError, setBillError] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
@@ -102,7 +106,9 @@ export default function CartDrawer({
 
   useEffect(() => {
     setCustomerName(session?.customerName || '');
-  }, [session?.customerName]);
+    setCustomerPhone(session?.customerPhone || '');
+    setCustomerEmail(session?.customerEmail || '');
+  }, [session?.customerEmail, session?.customerName, session?.customerPhone]);
 
   useEffect(() => {
     if (!session?._id) {
@@ -117,6 +123,8 @@ export default function CartDrawer({
 
     const syncPayload = JSON.stringify({
       customerName,
+      customerPhone,
+      customerEmail,
       cartItems: cart.map((item) => ({
         menuItemId: item._id,
         name: item.name,
@@ -151,7 +159,7 @@ export default function CartDrawer({
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [cart, customerName, session?._id, session?.isActive, sessionToken]);
+  }, [cart, customerEmail, customerName, customerPhone, session?._id, session?.isActive, sessionToken]);
 
   const handleCheckout = async () => {
     if (!tableId || !restaurantId || !sessionToken) {
@@ -160,6 +168,14 @@ export default function CartDrawer({
     }
 
     if (cart.length === 0 || hasLockedOrderState) {
+      return;
+    }
+
+    const trimmedPhone = customerPhone.trim();
+    const trimmedEmail = customerEmail.trim();
+
+    if (!trimmedPhone) {
+      setBillError('Mobile number is required to place the order.');
       return;
     }
 
@@ -186,6 +202,8 @@ export default function CartDrawer({
           sessionId: activeSession._id,
           sessionToken,
           customerName,
+          customerPhone: trimmedPhone,
+          customerEmail: trimmedEmail,
           items: cart.map((item) => ({
             menuItemId: item._id,
             quantity: item.quantity,
@@ -312,6 +330,39 @@ export default function CartDrawer({
                       value={customerName}
                       onChange={(event) => setCustomerName(event.target.value)}
                       placeholder="Enter your name"
+                      className="cart-customer-field"
+                    />
+                  </div>
+                </div>
+
+                <div className="cart-customer">
+                  <label className="cart-customer-label">
+                    Mobile Number
+                  </label>
+                  <div className="cart-customer-input">
+                    <Smartphone size={16} className="cart-customer-icon" />
+                    <input
+                      type="tel"
+                      value={customerPhone}
+                      onChange={(event) => setCustomerPhone(event.target.value)}
+                      placeholder="Enter your mobile number"
+                      className="cart-customer-field"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="cart-customer">
+                  <label className="cart-customer-label">
+                    Email (Optional)
+                  </label>
+                  <div className="cart-customer-input">
+                    <Mail size={16} className="cart-customer-icon" />
+                    <input
+                      type="email"
+                      value={customerEmail}
+                      onChange={(event) => setCustomerEmail(event.target.value)}
+                      placeholder="Enter your email"
                       className="cart-customer-field"
                     />
                   </div>

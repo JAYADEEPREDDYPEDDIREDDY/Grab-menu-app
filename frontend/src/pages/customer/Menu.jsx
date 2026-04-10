@@ -2,16 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { io } from "socket.io-client";
 import {
-  BellRing,
   Download,
   FileText,
   QrCode,
   Wallet,
   Search,
   Star,
-  Smartphone,
-  Volume2,
-  VolumeX,
   X,
 } from "lucide-react";
 import { useCart } from "../../context/CartContext";
@@ -42,47 +38,6 @@ const getOrderStatusTone = (status) => {
   if (status === "Ready") return "is-ready";
   if (status === "Preparing") return "is-progress";
   return "is-muted";
-};
-
-const ORDER_NOTIFICATION_SETTINGS_KEY = "grab-menu-order-notification-settings";
-
-const readNotificationSettings = () => {
-  if (typeof window === "undefined") {
-    return {
-      soundEnabled: true,
-      vibrationEnabled: true,
-      notifyLevel: "all",
-      soundTheme: "classic",
-    };
-  }
-
-  try {
-    const rawValue = window.localStorage.getItem(ORDER_NOTIFICATION_SETTINGS_KEY);
-    if (!rawValue) {
-      return {
-        soundEnabled: true,
-        vibrationEnabled: true,
-        notifyLevel: "all",
-        soundTheme: "classic",
-      };
-    }
-
-    const parsed = JSON.parse(rawValue);
-    return {
-      soundEnabled: parsed.soundEnabled !== false,
-      vibrationEnabled: parsed.vibrationEnabled !== false,
-      notifyLevel: parsed.notifyLevel === "ready-only" ? "ready-only" : "all",
-      soundTheme: parsed.soundTheme === "soft" ? "soft" : "classic",
-    };
-  } catch (error) {
-    console.error("Failed to read notification settings", error);
-    return {
-      soundEnabled: true,
-      vibrationEnabled: true,
-      notifyLevel: "all",
-      soundTheme: "classic",
-    };
-  }
 };
 
 const buildOrderSignature = (order) =>
@@ -279,13 +234,11 @@ export default function Menu() {
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
   const [feedbackSuccess, setFeedbackSuccess] = useState("");
   const [isBillingModalOpen, setIsBillingModalOpen] = useState(false);
-  const [notificationSettings, setNotificationSettings] = useState(readNotificationSettings);
   const [orderToast, setOrderToast] = useState(null);
   const [highlightedOrderId, setHighlightedOrderId] = useState("");
 
   const restoredSessionCartRef = useRef(false);
   const orderToastTimeoutRef = useRef(null);
-  const audioContextRef = useRef(null);
   const knownOrdersRef = useRef(new Map());
   const sessionTokenKey = useMemo(
     () => getStorageKey("grab-menu-session-token", restaurantId, tableId),
@@ -342,17 +295,6 @@ export default function Menu() {
     window.localStorage.setItem(sessionTokenKey, nextToken);
     sessionTokenRef.current = nextToken;
   }, [sessionTokenKey]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    window.localStorage.setItem(
-      ORDER_NOTIFICATION_SETTINGS_KEY,
-      JSON.stringify(notificationSettings)
-    );
-  }, [notificationSettings]);
 
   useEffect(() => () => {
     if (orderToastTimeoutRef.current) {
@@ -529,86 +471,6 @@ export default function Menu() {
     }
   }, [session?._id]);
 
-  const playNotificationSound = (status, soundTheme) => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass) {
-      return;
-    }
-
-    if (!audioContextRef.current) {
-      audioContextRef.current = new AudioContextClass();
-    }
-
-    const context = audioContextRef.current;
-    if (context.state === "suspended") {
-      context.resume().catch(() => {});
-    }
-
-    const now = context.currentTime;
-    const masterGain = context.createGain();
-    masterGain.connect(context.destination);
-    masterGain.gain.setValueAtTime(0.0001, now);
-    masterGain.gain.exponentialRampToValueAtTime(0.1, now + 0.02);
-
-    const classicPattern =
-      status === "Ready"
-        ? [
-            [880, 0, 0.12],
-            [1174, 0.14, 0.14],
-          ]
-        : status === "Preparing"
-          ? [
-              [620, 0, 0.1],
-              [760, 0.11, 0.1],
-            ]
-          : status === "Completed"
-            ? [
-                [740, 0, 0.12],
-                [988, 0.14, 0.16],
-              ]
-            : [[540, 0, 0.12]];
-
-    const softPattern =
-      status === "Ready"
-        ? [
-            [660, 0, 0.12],
-            [880, 0.16, 0.16],
-          ]
-        : status === "Preparing"
-          ? [[520, 0, 0.14]]
-          : status === "Completed"
-            ? [[700, 0, 0.18]]
-            : [[480, 0, 0.1]];
-
-    const pattern = soundTheme === "soft" ? softPattern : classicPattern;
-
-    pattern.forEach(([frequency, startOffset, duration]) => {
-      const oscillator = context.createOscillator();
-      const gainNode = context.createGain();
-      oscillator.type = soundTheme === "soft" ? "sine" : "triangle";
-      oscillator.frequency.setValueAtTime(frequency, now + startOffset);
-      gainNode.gain.setValueAtTime(0.0001, now + startOffset);
-      gainNode.gain.exponentialRampToValueAtTime(0.12, now + startOffset + 0.02);
-      gainNode.gain.exponentialRampToValueAtTime(
-        0.0001,
-        now + startOffset + duration
-      );
-      oscillator.connect(gainNode);
-      gainNode.connect(masterGain);
-      oscillator.start(now + startOffset);
-      oscillator.stop(now + startOffset + duration + 0.02);
-    });
-
-    masterGain.gain.exponentialRampToValueAtTime(
-      0.0001,
-      now + Math.max(...pattern.map(([, startOffset, duration]) => startOffset + duration)) + 0.04
-    );
-  };
-
   const showOrderToast = (title, message, tone) => {
     setOrderToast({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -656,33 +518,12 @@ export default function Menu() {
       return;
     }
 
-    if (
-      notificationSettings.notifyLevel === "ready-only" &&
-      statusOverride !== "Ready"
-    ) {
-      return;
-    }
-
     const { title, message } = getOrderNotificationCopy(incomingOrder, isNewOrder);
     showOrderToast(title, message, getOrderStatusTone(statusOverride));
     setHighlightedOrderId(incomingOrder._id);
     window.setTimeout(() => {
       setHighlightedOrderId((current) => (current === incomingOrder._id ? "" : current));
     }, 2600);
-
-    if (notificationSettings.soundEnabled) {
-      playNotificationSound(statusOverride, notificationSettings.soundTheme);
-    }
-
-    if (notificationSettings.vibrationEnabled && typeof navigator !== "undefined" && navigator.vibrate) {
-      const vibrationPattern =
-        statusOverride === "Ready"
-          ? [140, 80, 180]
-          : statusOverride === "Preparing"
-            ? [90]
-            : [70];
-      navigator.vibrate(vibrationPattern);
-    }
   };
 
   useEffect(() => {
@@ -1050,73 +891,6 @@ export default function Menu() {
         <span className="menu-panel-pill is-neutral">
           {sessionLoading ? "Loading" : `${orders.length} total`}
         </span>
-      </div>
-
-      <div className="menu-order-notify-toolbar">
-        <div className="menu-order-notify-title">
-          <BellRing size={15} />
-          <span>Notifications</span>
-        </div>
-        <div className="menu-order-notify-controls">
-          <button
-            type="button"
-            className={`menu-order-toggle ${notificationSettings.soundEnabled ? "is-active" : ""}`}
-            onClick={() =>
-              setNotificationSettings((current) => ({
-                ...current,
-                soundEnabled: !current.soundEnabled,
-              }))
-            }
-            aria-label={notificationSettings.soundEnabled ? "Turn off sound" : "Turn on sound"}
-          >
-            {notificationSettings.soundEnabled ? <Volume2 size={15} /> : <VolumeX size={15} />}
-            <span>Sound</span>
-          </button>
-          <button
-            type="button"
-            className={`menu-order-toggle ${notificationSettings.vibrationEnabled ? "is-active" : ""}`}
-            onClick={() =>
-              setNotificationSettings((current) => ({
-                ...current,
-                vibrationEnabled: !current.vibrationEnabled,
-              }))
-            }
-            aria-label={
-              notificationSettings.vibrationEnabled ? "Turn off vibration" : "Turn on vibration"
-            }
-          >
-            <Smartphone size={15} />
-            <span>Vibrate</span>
-          </button>
-          <select
-            value={notificationSettings.notifyLevel}
-            onChange={(event) =>
-              setNotificationSettings((current) => ({
-                ...current,
-                notifyLevel: event.target.value,
-              }))
-            }
-            className="menu-order-select"
-            aria-label="Notification level"
-          >
-            <option value="all">All updates</option>
-            <option value="ready-only">Ready only</option>
-          </select>
-          <select
-            value={notificationSettings.soundTheme}
-            onChange={(event) =>
-              setNotificationSettings((current) => ({
-                ...current,
-                soundTheme: event.target.value,
-              }))
-            }
-            className="menu-order-select"
-            aria-label="Notification sound theme"
-          >
-            <option value="classic">Classic sound</option>
-            <option value="soft">Soft sound</option>
-          </select>
-        </div>
       </div>
 
       {sessionLoading ? (

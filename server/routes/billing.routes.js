@@ -29,8 +29,6 @@ const getPaymentLabel = (status) => {
 const isRenderableBill = (bill) =>
   Array.isArray(bill?.tableIds) &&
   bill.tableIds.length > 0 &&
-  Array.isArray(bill?.orderIds) &&
-  bill.orderIds.length > 0 &&
   Array.isArray(bill?.lineItems) &&
   bill.lineItems.length > 0 &&
   Number(bill.totalAmount || 0) > 0;
@@ -99,6 +97,30 @@ const aggregateLineItems = (orders) => {
   return Array.from(itemMap.values()).sort((left, right) => left.name.localeCompare(right.name));
 };
 
+const normalizeManualLineItems = (items = []) =>
+  items
+    .map((item) => {
+      const menuItemId = item?.menuItemId || null;
+      const name = String(item?.name || '').trim();
+      const quantity = Number(item?.quantity || 0);
+      const unitPrice = roundCurrency(item?.unitPrice || 0);
+
+      if (!name || !Number.isFinite(quantity) || quantity <= 0 || unitPrice < 0) {
+        return null;
+      }
+
+      return {
+        menuItemId,
+        name,
+        quantity,
+        unitPrice,
+        totalPrice: roundCurrency(quantity * unitPrice),
+        orderIds: [],
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => left.name.localeCompare(right.name));
+
 const calculateTotals = (subtotal, gstRate, serviceChargeRate) => {
   const gstAmount = roundCurrency((subtotal * gstRate) / 100);
   const serviceChargeAmount = roundCurrency((subtotal * serviceChargeRate) / 100);
@@ -142,7 +164,9 @@ const buildBillPayload = ({
   restaurantId,
   sessionId = null,
   tableIds,
-  orders,
+  orders = [],
+  lineItems: providedLineItems = null,
+  orderIds: providedOrderIds = null,
   gstRate,
   serviceChargeRate,
   paymentMethod = '',
@@ -150,7 +174,9 @@ const buildBillPayload = ({
   combinedTables = false,
   notes = '',
 }) => {
-  const lineItems = aggregateLineItems(orders);
+  const lineItems = Array.isArray(providedLineItems)
+    ? providedLineItems
+    : aggregateLineItems(orders);
   const subtotal = roundCurrency(
     lineItems.reduce((sum, lineItem) => sum + Number(lineItem.totalPrice || 0), 0)
   );
@@ -160,7 +186,7 @@ const buildBillPayload = ({
     restaurantId,
     sessionId,
     tableIds,
-    orderIds: orders.map((order) => order._id),
+    orderIds: Array.isArray(providedOrderIds) ? providedOrderIds : orders.map((order) => order._id),
     lineItems,
     subtotal,
     gstRate,
@@ -173,6 +199,29 @@ const buildBillPayload = ({
     combinedTables,
     notes,
   };
+};
+
+const getActiveSessionForTables = async (restaurantId, tableIds) =>
+  TableSession.findOne({
+    restaurantId,
+    tableId: { $in: tableIds },
+    isActive: true,
+  }).sort({ createdAt: -1 });
+
+const setSessionBillingState = async (req, session, paymentMethod) => {
+  if (!session) return;
+
+  session.status = 'BILLING';
+  session.isLocked = true;
+  session.paymentRequest = {
+    method: paymentMethod === 'CASH' ? 'Cash' : paymentMethod || null,
+    status: paymentMethod === 'CASH' ? 'awaiting_approval' : 'pending',
+    requestedAt: new Date(),
+    completedAt: null,
+  };
+  session.lastActivityAt = new Date();
+  await session.save();
+  await emitSessionUpdate(req, session._id);
 };
 
 const releaseBillTables = async (req, bill) => {
@@ -421,6 +470,89 @@ router.patch('/mark-paid/:billId', auth, requireRole('RESTAURANT_ADMIN'), async 
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Failed to mark bill as paid' });
+  }
+});
+
+router.post('/manual', auth, requireRole('RESTAURANT_ADMIN'), async (req, res) => {
+  try {
+    const restaurantId = req.user.restaurantId;
+    const {
+      tableIds = [],
+      manualItems = [],
+      gstRate,
+      serviceChargeRate,
+      paymentMethod = '',
+      notes = '',
+    } = req.body;
+
+    if (!Array.isArray(tableIds) || tableIds.length !== 1) {
+      return res.status(400).json({ message: 'Select exactly one table for a manual bill.' });
+    }
+
+    const table = await Table.findOne({
+      _id: tableIds[0],
+      restaurantId,
+    });
+
+    if (!table) {
+      return res.status(404).json({ message: 'Selected table was not found.' });
+    }
+
+    const existingActiveBill = await Bill.findOne({
+      restaurantId,
+      tableIds: table._id,
+      paymentStatus: { $ne: 'PAID' },
+    });
+
+    if (existingActiveBill) {
+      return res.status(400).json({ message: 'This table already has an active bill.' });
+    }
+
+    if (!['', 'QR', 'UPI', 'CASH'].includes(paymentMethod)) {
+      return res.status(400).json({ message: 'Select a valid payment method.' });
+    }
+
+    const lineItems = normalizeManualLineItems(manualItems);
+    if (!lineItems.length) {
+      return res.status(400).json({ message: 'Add at least one valid manual item.' });
+    }
+
+    const defaults = await getRestaurantBillingDefaults(restaurantId);
+    const session = await getActiveSessionForTables(restaurantId, [table._id]);
+    const payload = buildBillPayload({
+      restaurantId,
+      sessionId: session?._id || null,
+      tableIds: [table._id],
+      lineItems,
+      orderIds: [],
+      gstRate: gstRate !== undefined ? Math.max(0, Number(gstRate) || 0) : defaults.gstRate,
+      serviceChargeRate:
+        serviceChargeRate !== undefined
+          ? Math.max(0, Number(serviceChargeRate) || 0)
+          : defaults.serviceChargeRate,
+      paymentMethod,
+      paymentStatus: paymentMethod === 'CASH' ? 'AWAITING_APPROVAL' : 'PENDING',
+      notes,
+    });
+
+    const bill = await Bill.create(payload);
+    await setSessionBillingState(req, session, paymentMethod);
+    await emitBillUpdate(req, bill._id);
+    const populatedBill = await populateBill(Bill.findById(bill._id));
+    res.status(201).json(populatedBill);
+  } catch (error) {
+    console.error(error);
+    const validationMessage =
+      error?.name === 'ValidationError'
+        ? Object.values(error.errors || {})
+            .map((entry) => entry.message)
+            .filter(Boolean)
+            .join(', ')
+        : '';
+
+    res.status(500).json({
+      message: validationMessage || error.message || 'Failed to generate manual bill',
+    });
   }
 });
 

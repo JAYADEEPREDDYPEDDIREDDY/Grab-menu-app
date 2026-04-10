@@ -80,6 +80,16 @@ const tableSessionSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    customerPhone: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    customerEmail: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     cartItems: [sessionCartItemSchema],
     orders: [
       {

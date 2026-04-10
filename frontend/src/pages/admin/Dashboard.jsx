@@ -23,8 +23,14 @@ import {
   Card,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  MenuItem,
   Snackbar,
   Stack,
+  TextField,
   Typography,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
@@ -35,6 +41,9 @@ import LunchDiningRoundedIcon from '@mui/icons-material/LunchDiningRounded';
 import PointOfSaleRoundedIcon from '@mui/icons-material/PointOfSaleRounded';
 import CircleRoundedIcon from '@mui/icons-material/CircleRounded';
 import VolumeUpRoundedIcon from '@mui/icons-material/VolumeUpRounded';
+import EditRoundedIcon from '@mui/icons-material/EditRounded';
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
+import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import { SOCKET_BASE_URL, getApiUrl } from '../../config/api';
 
 const columns = [
@@ -81,6 +90,7 @@ const actionConfig = {
 
 const RUPEE_SYMBOL = '\u20B9';
 const TITLE_SEPARATOR = '\u2022';
+const createEditableOrderItem = () => ({ menuItemId: '', quantity: '1' });
 
 const normalizeOrders = (incomingOrders) =>
   incomingOrders.filter(
@@ -181,7 +191,115 @@ function formatTime(value) {
   });
 }
 
-function SortableOrderCard({ order, onAdvance }) {
+function OrderEditDialog({
+  open,
+  order,
+  menuItems,
+  form,
+  onClose,
+  onChange,
+  onItemChange,
+  onAddItem,
+  onRemoveItem,
+  onSave,
+  saving,
+}) {
+  if (!order) return null;
+
+  return (
+    <Dialog
+      open={open}
+      onClose={saving ? undefined : onClose}
+      fullWidth
+      maxWidth="md"
+      PaperProps={{ sx: { backgroundColor: '#1A1715', borderRadius: '22px' } }}
+    >
+      <DialogTitle>Edit Order {formatOrderId(order)}</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2.5} sx={{ pt: 1 }}>
+          <Stack
+            direction={{ xs: 'column', md: 'row' }}
+            spacing={2}
+            sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' } }}
+          >
+            <TextField
+              label="Customer Name"
+              value={form.customerName}
+              onChange={(event) => onChange('customerName', event.target.value)}
+            />
+            <TextField
+              label="Mobile Number"
+              value={form.customerPhone}
+              onChange={(event) => onChange('customerPhone', event.target.value)}
+              required
+            />
+            <TextField
+              label="Email"
+              type="email"
+              value={form.customerEmail}
+              onChange={(event) => onChange('customerEmail', event.target.value)}
+            />
+          </Stack>
+
+          <Stack spacing={1.5}>
+            {form.items.map((item, index) => (
+              <Stack
+                key={`editable-order-item-${index}`}
+                direction={{ xs: 'column', md: 'row' }}
+                spacing={1.5}
+                alignItems={{ md: 'center' }}
+              >
+                <TextField
+                  select
+                  label="Menu Item"
+                  value={item.menuItemId}
+                  onChange={(event) => onItemChange(index, 'menuItemId', event.target.value)}
+                  sx={{ flex: 1.8 }}
+                >
+                  {menuItems.map((menuItem) => (
+                    <MenuItem key={menuItem._id} value={menuItem._id}>
+                      {`${menuItem.name} (${RUPEE_SYMBOL}${Number(menuItem.price || 0).toFixed(2)})`}
+                    </MenuItem>
+                  ))}
+                </TextField>
+                <TextField
+                  label="Qty"
+                  type="number"
+                  value={item.quantity}
+                  onChange={(event) => onItemChange(index, 'quantity', event.target.value)}
+                  sx={{ width: { xs: '100%', md: 120 } }}
+                />
+                <IconButton
+                  onClick={() => onRemoveItem(index)}
+                  disabled={form.items.length === 1}
+                  sx={{ color: '#FCA5A5' }}
+                >
+                  <DeleteOutlineRoundedIcon />
+                </IconButton>
+              </Stack>
+            ))}
+          </Stack>
+
+          <Stack direction="row" justifyContent="space-between" spacing={1.5}>
+            <Button variant="outlined" startIcon={<AddRoundedIcon />} onClick={onAddItem}>
+              Add Item
+            </Button>
+            <Stack direction="row" spacing={1.5}>
+              <Button variant="outlined" onClick={onClose} disabled={saving}>
+                Cancel
+              </Button>
+              <Button variant="contained" onClick={onSave} disabled={saving}>
+                {saving ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </Stack>
+          </Stack>
+        </Stack>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SortableOrderCard({ order, onAdvance, onEdit }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({
       id: order._id,
@@ -252,6 +370,12 @@ function SortableOrderCard({ order, onAdvance }) {
                 <AccessTimeRoundedIcon sx={{ fontSize: 18 }} />
                 <Typography sx={{ fontSize: 15 }}>{formatTime(order.createdAt)}</Typography>
               </Stack>
+              {order.customerPhone ? (
+                <Typography sx={{ color: 'text.secondary', fontSize: 13, mt: 0.5 }}>
+                  {order.customerPhone}
+                  {order.customerEmail ? ` • ${order.customerEmail}` : ''}
+                </Typography>
+              ) : null}
             </Box>
           </Stack>
 
@@ -286,26 +410,37 @@ function SortableOrderCard({ order, onAdvance }) {
             <Typography sx={{ fontWeight: 700 }}>Completed - Ready for billing</Typography>
           </Stack>
         ) : (
-          <Button
-            fullWidth
-            variant="contained"
-            startIcon={actionConfig[order.status]?.icon}
-            onClick={() => onAdvance(order._id, actionConfig[order.status]?.nextStatus)}
-            sx={{
-              borderRadius: '12px',
-              py: 1.4,
-              ...actionConfig[order.status]?.sx,
-            }}
-          >
-            {actionConfig[order.status]?.label}
-          </Button>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.25}>
+            <Button
+              fullWidth
+              variant="outlined"
+              startIcon={<EditRoundedIcon />}
+              onClick={() => onEdit(order)}
+              sx={{ borderRadius: '12px', py: 1.4 }}
+            >
+              Edit Order
+            </Button>
+            <Button
+              fullWidth
+              variant="contained"
+              startIcon={actionConfig[order.status]?.icon}
+              onClick={() => onAdvance(order._id, actionConfig[order.status]?.nextStatus)}
+              sx={{
+                borderRadius: '12px',
+                py: 1.4,
+                ...actionConfig[order.status]?.sx,
+              }}
+            >
+              {actionConfig[order.status]?.label}
+            </Button>
+          </Stack>
         )}
       </Stack>
     </Card>
   );
 }
 
-function KanbanColumn({ column, orders, badge, onAdvance, onClearCompleted, clearingCompleted }) {
+function KanbanColumn({ column, orders, badge, onAdvance, onEdit, onClearCompleted, clearingCompleted }) {
   const { setNodeRef } = useDroppable({
     id: column.key,
   });
@@ -360,7 +495,7 @@ function KanbanColumn({ column, orders, badge, onAdvance, onClearCompleted, clea
           <Stack spacing={2.25}>
             {orders.length ? (
               orders.map((order) => (
-                <SortableOrderCard key={order._id} order={order} onAdvance={onAdvance} />
+                <SortableOrderCard key={order._id} order={order} onAdvance={onAdvance} onEdit={onEdit} />
               ))
             ) : (
               <Box
@@ -388,6 +523,7 @@ function KanbanColumn({ column, orders, badge, onAdvance, onClearCompleted, clea
 export default function Dashboard() {
   const { token, restaurant, user, refreshRestaurant } = useAuth();
   const [orders, setOrders] = useState([]);
+  const [menuItems, setMenuItems] = useState([]);
   const [activeBills, setActiveBills] = useState([]);
   const [feedbackBills, setFeedbackBills] = useState([]);
   const [sessionOverview, setSessionOverview] = useState({
@@ -399,6 +535,14 @@ export default function Dashboard() {
   const [incomingAlert, setIncomingAlert] = useState(null);
   const [releasingSessionId, setReleasingSessionId] = useState('');
   const [processingPaymentBillId, setProcessingPaymentBillId] = useState('');
+  const [editingOrder, setEditingOrder] = useState(null);
+  const [orderEditForm, setOrderEditForm] = useState({
+    customerName: '',
+    customerPhone: '',
+    customerEmail: '',
+    items: [createEditableOrderItem()],
+  });
+  const [savingOrderEdit, setSavingOrderEdit] = useState(false);
   const [clearingCompleted, setClearingCompleted] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
@@ -541,6 +685,24 @@ export default function Dashboard() {
     }
   }, [token]);
 
+  const fetchMenuItems = useCallback(async () => {
+    try {
+      const query = user?.restaurantId ? `?restaurantId=${user.restaurantId}` : '';
+      const res = await fetch(getApiUrl(`/api/menu${query}`), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) {
+        return;
+      }
+
+      const data = await res.json();
+      setMenuItems(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error(error);
+    }
+  }, [token, user?.restaurantId]);
+
   const fetchBillingOverview = useCallback(async () => {
     try {
       const res = await fetch(getApiUrl('/api/billing/overview'), {
@@ -581,6 +743,7 @@ export default function Dashboard() {
     fetchOrders();
     fetchSessionOverview();
     fetchBillingOverview();
+    fetchMenuItems();
     refreshRestaurant();
 
     if (
@@ -603,6 +766,7 @@ export default function Dashboard() {
       fetchOrders();
       fetchSessionOverview();
       fetchBillingOverview();
+      fetchMenuItems();
     });
 
     socket.on('newOrder', (order) => {
@@ -696,7 +860,108 @@ export default function Dashboard() {
       window.clearTimeout(midnightTimeoutId);
       window.clearInterval(midnightIntervalId);
     };
-  }, [fetchBillingOverview, fetchOrders, fetchSessionOverview, refreshRestaurant, restaurantId]);
+  }, [fetchBillingOverview, fetchMenuItems, fetchOrders, fetchSessionOverview, refreshRestaurant, restaurantId]);
+
+  const openOrderEditor = (order) => {
+    setEditingOrder(order);
+    setOrderEditForm({
+      customerName: order?.customerName || '',
+      customerPhone: order?.customerPhone || '',
+      customerEmail: order?.customerEmail || '',
+      items:
+        Array.isArray(order?.items) && order.items.length
+          ? order.items.map((item) => ({
+              menuItemId: String(item.menuItemId?._id || item.menuItemId || ''),
+              quantity: String(Math.max(1, Number(item.quantity) || 1)),
+            }))
+          : [createEditableOrderItem()],
+    });
+  };
+
+  const closeOrderEditor = () => {
+    if (savingOrderEdit) return;
+    setEditingOrder(null);
+  };
+
+  const updateOrderEditField = (field, value) => {
+    setOrderEditForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const updateOrderEditItem = (index, field, value) => {
+    setOrderEditForm((current) => ({
+      ...current,
+      items: current.items.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, [field]: value } : item
+      ),
+    }));
+  };
+
+  const addOrderEditItem = () => {
+    setOrderEditForm((current) => ({
+      ...current,
+      items: [...current.items, createEditableOrderItem()],
+    }));
+  };
+
+  const removeOrderEditItem = (index) => {
+    setOrderEditForm((current) => ({
+      ...current,
+      items:
+        current.items.length === 1
+          ? current.items
+          : current.items.filter((_, itemIndex) => itemIndex !== index),
+    }));
+  };
+
+  const saveOrderChanges = async () => {
+    if (!editingOrder?._id) return;
+
+    try {
+      setSavingOrderEdit(true);
+      const response = await fetch(getApiUrl(`/api/orders/${editingOrder._id}`), {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          customerName: orderEditForm.customerName,
+          customerPhone: orderEditForm.customerPhone,
+          customerEmail: orderEditForm.customerEmail,
+          items: orderEditForm.items.map((item) => ({
+            menuItemId: item.menuItemId,
+            quantity: Number(item.quantity) || 0,
+          })),
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to update order');
+      }
+
+      setOrders((current) =>
+        normalizeOrders(current.map((order) => (order._id === data._id ? data : order)))
+      );
+      setIncomingAlert({
+        key: `order-edit-${data._id}-${Date.now()}`,
+        title: 'Order updated',
+        message: `Order ${formatOrderId(data)} was updated successfully.`,
+        severity: 'success',
+      });
+      setEditingOrder(null);
+    } catch (error) {
+      console.error(error);
+      setIncomingAlert({
+        key: `order-edit-error-${editingOrder._id}-${Date.now()}`,
+        title: 'Order update failed',
+        message: error.message || 'Unable to update the order.',
+        severity: 'error',
+      });
+    } finally {
+      setSavingOrderEdit(false);
+    }
+  };
 
   const updateOrderStatus = async (orderId, nextStatus) => {
     if (!nextStatus) return;
@@ -1243,6 +1508,7 @@ export default function Dashboard() {
                 orders={getColumnOrders(column.key)}
                 badge={getColumnOrders(column.key).length}
                 onAdvance={updateOrderStatus}
+                onEdit={openOrderEditor}
                 onClearCompleted={clearCompletedOrders}
                 clearingCompleted={clearingCompleted}
               />
@@ -1250,6 +1516,20 @@ export default function Dashboard() {
           </Box>
         </DndContext>
       </Stack>
+
+      <OrderEditDialog
+        open={Boolean(editingOrder)}
+        order={editingOrder}
+        menuItems={menuItems}
+        form={orderEditForm}
+        onClose={closeOrderEditor}
+        onChange={updateOrderEditField}
+        onItemChange={updateOrderEditItem}
+        onAddItem={addOrderEditItem}
+        onRemoveItem={removeOrderEditItem}
+        onSave={saveOrderChanges}
+        saving={savingOrderEdit}
+      />
 
       <Snackbar
         key={incomingAlert?.key}

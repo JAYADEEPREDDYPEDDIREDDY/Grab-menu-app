@@ -12,6 +12,21 @@ const orderSchema = new mongoose.Schema({
     ref: 'Table',
     required: true,
   },
+  customerName: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  customerPhone: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  customerEmail: {
+    type: String,
+    trim: true,
+    default: '',
+  },
   items: [{
     menuItemId: {
       type: mongoose.Schema.Types.ObjectId,

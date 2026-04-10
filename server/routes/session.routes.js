@@ -206,7 +206,13 @@ router.get('/table/:tableId', async (req, res) => {
 
 router.patch('/:sessionId/cart', async (req, res) => {
   try {
-    const { sessionToken, cartItems = [], customerName = '' } = req.body;
+    const {
+      sessionToken,
+      cartItems = [],
+      customerName = '',
+      customerPhone = '',
+      customerEmail = '',
+    } = req.body;
     const session = await TableSession.findById(req.params.sessionId).populate('tableId');
 
     if (!session || !session.isActive) {
@@ -228,6 +234,10 @@ router.patch('/:sessionId/cart', async (req, res) => {
           }))
       : [];
     session.customerName = typeof customerName === 'string' ? customerName.trim() : session.customerName;
+    session.customerPhone =
+      typeof customerPhone === 'string' ? customerPhone.trim() : session.customerPhone;
+    session.customerEmail =
+      typeof customerEmail === 'string' ? customerEmail.trim() : session.customerEmail;
     session.lastActivityAt = new Date();
     await session.save();
     await emitSessionUpdate(req, session._id);

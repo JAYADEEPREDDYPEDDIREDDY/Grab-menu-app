@@ -3,6 +3,7 @@ import { io } from 'socket.io-client';
 import { useAuth } from '../../context/AuthContext';
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Card,
@@ -31,6 +32,8 @@ import PaymentsRoundedIcon from '@mui/icons-material/PaymentsRounded';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded';
 import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
+import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import { SOCKET_BASE_URL, getApiUrl } from '../../config/api';
 
 const RS = '\u20B9';
@@ -47,6 +50,7 @@ const historyRanges = [
 ];
 
 const money = (value) => `${RS}${Number(value || 0).toFixed(2)}`;
+const createEmptyManualItem = () => ({ menuItemId: '', name: '', quantity: '1', unitPrice: '' });
 
 const escapeHtml = (value) =>
   String(value ?? '')
@@ -362,7 +366,7 @@ function BillDetailsDialog({ bill, open, onClose, onApproveCash, onMarkPaid, onD
 }
 
 export default function Billing() {
-  const { token, restaurant, setRestaurantProfile } = useAuth();
+  const { token, restaurant, user, setRestaurantProfile } = useAuth();
   const [tab, setTab] = useState('active');
   const [tables, setTables] = useState([]);
   const [activeBills, setActiveBills] = useState([]);
@@ -374,6 +378,9 @@ export default function Billing() {
   const [gstRate, setGstRate] = useState('5');
   const [serviceChargeRate, setServiceChargeRate] = useState('0');
   const [notes, setNotes] = useState('');
+  const [manualTableId, setManualTableId] = useState('');
+  const [manualItems, setManualItems] = useState([createEmptyManualItem()]);
+  const [menuItems, setMenuItems] = useState([]);
   const [activeBill, setActiveBill] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -442,6 +449,26 @@ export default function Billing() {
   useEffect(() => {
     loadOverview();
   }, [loadOverview]);
+
+  useEffect(() => {
+    const loadMenuItems = async () => {
+      try {
+        const query = user?.restaurantId ? `?restaurantId=${user.restaurantId}` : '';
+        const response = await fetch(getApiUrl(`/api/menu${query}`), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await response.json().catch(() => ([]));
+        if (!response.ok) {
+          throw new Error('Failed to load menu items');
+        }
+        setMenuItems(Array.isArray(data) ? data : []);
+      } catch (menuError) {
+        console.error(menuError);
+      }
+    };
+
+    loadMenuItems();
+  }, [token, user?.restaurantId]);
 
   useEffect(() => {
     loadHistory(historyRange);
@@ -589,6 +616,97 @@ export default function Billing() {
     }
   };
 
+  const updateManualItem = (index, field, value) => {
+    setManualItems((current) =>
+      current.map((item, itemIndex) =>
+        itemIndex === index
+          ? {
+              ...item,
+              [field]: value,
+            }
+          : item
+      )
+    );
+  };
+
+  const handleManualMenuItemChange = (index, menuItemId) => {
+    const selectedItem = menuItems.find((menuItem) => menuItem._id === menuItemId);
+
+    setManualItems((current) =>
+      current.map((item, itemIndex) =>
+        itemIndex === index
+          ? {
+              ...item,
+              menuItemId,
+              name: selectedItem?.name || '',
+              unitPrice:
+                selectedItem && Number.isFinite(Number(selectedItem.price))
+                  ? String(selectedItem.price)
+                  : '',
+            }
+          : item
+      )
+    );
+  };
+
+  const addManualItem = () => {
+    setManualItems((current) => [...current, createEmptyManualItem()]);
+  };
+
+  const removeManualItem = (index) => {
+    setManualItems((current) =>
+      current.length === 1 ? current : current.filter((_, itemIndex) => itemIndex !== index)
+    );
+  };
+
+  const generateManualBill = async () => {
+    try {
+      setSubmitting(true);
+      setError('');
+      setSuccess('');
+      const response = await fetch(getApiUrl('/api/billing/manual'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          tableIds: manualTableId ? [manualTableId] : [],
+          manualItems: manualItems.map((item) => ({
+            menuItemId: item.menuItemId || null,
+            name: item.name,
+            quantity: Number(item.quantity) || 0,
+            unitPrice: Number(item.unitPrice) || 0,
+          })),
+          gstRate: Number(gstRate) || 0,
+          serviceChargeRate: Number(serviceChargeRate) || 0,
+          paymentMethod,
+          notes,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to generate manual bill');
+      }
+      setActiveBill(data);
+      setManualTableId('');
+      setManualItems([createEmptyManualItem()]);
+      setSuccess('Manual bill generated successfully.');
+      loadOverview();
+      loadHistory(historyRange);
+    } catch (manualBillingError) {
+      console.error(manualBillingError);
+      setError(manualBillingError.message || 'Failed to generate manual bill');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const selectedManualTable = tables.find((table) => table._id === manualTableId);
+  const hasValidManualItems = manualItems.some(
+    (item) => item.menuItemId && Number(item.quantity) > 0 && Number(item.unitPrice) >= 0
+  );
+
   return (
     <Stack spacing={3.5}>
       <Box>
@@ -629,6 +747,105 @@ export default function Billing() {
           <Stack direction="row" justifyContent="flex-end">
             <Button variant="outlined" disabled={submitting} onClick={saveBillingDefaults}>
               Save Billing Defaults
+            </Button>
+          </Stack>
+        </Stack>
+      </Card>
+
+      <Card sx={{ backgroundColor: '#1A1715', borderRadius: '20px', p: 3 }}>
+        <Stack spacing={2.5}>
+          <Stack
+            direction={{ xs: 'column', lg: 'row' }}
+            spacing={2}
+            justifyContent="space-between"
+            alignItems={{ xs: 'flex-start', lg: 'center' }}
+          >
+            <Box>
+              <Typography variant="h6" sx={{ mb: 0.75 }}>
+                Manual Bill Entry
+              </Typography>
+              <Typography color="text.secondary">
+                Add custom items from the admin dashboard and generate the bill directly for a table.
+              </Typography>
+            </Box>
+            <Button
+              variant="contained"
+              startIcon={<ReceiptLongRoundedIcon />}
+              disabled={
+                submitting ||
+                !manualTableId ||
+                !hasValidManualItems ||
+                Boolean(selectedManualTable?.hasActiveBill)
+              }
+              onClick={generateManualBill}
+            >
+              Generate Manual Bill
+            </Button>
+          </Stack>
+
+          <Autocomplete
+            options={tables}
+            value={tables.find((table) => table._id === manualTableId) || null}
+            onChange={(_, value) => setManualTableId(value?._id || '')}
+            getOptionLabel={(option) =>
+              `Table ${option.tableNumber}${option.hasActiveBill ? ' - Active bill' : ''}`
+            }
+            isOptionEqualToValue={(option, value) => option._id === value._id}
+            sx={{ maxWidth: 320 }}
+            renderInput={(params) => <TextField {...params} label="Search Table" />}
+          />
+
+          {selectedManualTable?.hasActiveBill ? (
+            <Alert severity="warning">This table already has an active bill.</Alert>
+          ) : null}
+
+          <Stack spacing={1.5}>
+            {manualItems.map((item, index) => (
+              <Stack
+                key={`manual-item-${index}`}
+                direction={{ xs: 'column', md: 'row' }}
+                spacing={1.5}
+                alignItems={{ md: 'center' }}
+              >
+                <Autocomplete
+                  options={menuItems}
+                  value={menuItems.find((menuItem) => menuItem._id === item.menuItemId) || null}
+                  onChange={(_, value) => handleManualMenuItemChange(index, value?._id || '')}
+                  getOptionLabel={(option) => `${option.name} (${money(option.price)})`}
+                  isOptionEqualToValue={(option, value) => option._id === value._id}
+                  sx={{ flex: 1.6 }}
+                  renderInput={(params) => <TextField {...params} label="Search Menu Item" />}
+                />
+                <TextField
+                  label="Qty"
+                  type="number"
+                  value={item.quantity}
+                  onChange={(event) => updateManualItem(index, 'quantity', event.target.value)}
+                  sx={{ width: { xs: '100%', md: 120 } }}
+                />
+                <TextField
+                  label="Unit Price"
+                  type="number"
+                  value={item.unitPrice}
+                  onChange={(event) => updateManualItem(index, 'unitPrice', event.target.value)}
+                  sx={{ width: { xs: '100%', md: 160 } }}
+                />
+                <Button
+                  variant="outlined"
+                  color="inherit"
+                  startIcon={<DeleteOutlineRoundedIcon />}
+                  disabled={manualItems.length === 1}
+                  onClick={() => removeManualItem(index)}
+                >
+                  Remove
+                </Button>
+              </Stack>
+            ))}
+          </Stack>
+
+          <Stack direction="row" justifyContent="flex-start">
+            <Button variant="outlined" startIcon={<AddRoundedIcon />} onClick={addManualItem}>
+              Add Item
             </Button>
           </Stack>
         </Stack>

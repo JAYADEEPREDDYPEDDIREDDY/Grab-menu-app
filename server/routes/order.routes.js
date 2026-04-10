@@ -1,11 +1,50 @@
 const express = require('express');
 const router = express.Router();
 const Order = require('../models/Order');
+const Bill = require('../models/Bill');
 const Table = require('../models/Table');
 const MenuItem = require('../models/MenuItem');
 const TableSession = require('../models/TableSession');
 const auth = require('../middleware/auth.middleware');
 const { requireRole } = require('../middleware/auth.middleware');
+
+const phonePattern = /^\+?[0-9]{7,15}$/;
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const normalizeCustomerContact = (payload = {}) => ({
+  customerName: String(payload.customerName || '').trim(),
+  customerPhone: String(payload.customerPhone || '').trim(),
+  customerEmail: String(payload.customerEmail || '').trim().toLowerCase(),
+});
+
+const validateCustomerContact = ({ customerPhone, customerEmail }) => {
+  if (!customerPhone) {
+    return 'Mobile number is required.';
+  }
+
+  if (!phonePattern.test(customerPhone)) {
+    return 'Enter a valid mobile number.';
+  }
+
+  if (customerEmail && !emailPattern.test(customerEmail)) {
+    return 'Enter a valid email address.';
+  }
+
+  return '';
+};
+
+const buildNormalizedOrderItems = ({ requestedItems = [], menuItemMap }) =>
+  requestedItems.map((item) => {
+    const menuItem = menuItemMap.get(String(item.menuItemId));
+    return {
+      menuItemId: menuItem._id,
+      quantity: Math.max(1, Number(item.quantity) || 1),
+      priceAtTimeOfOrder: menuItem.price,
+    };
+  });
+
+const calculateOrderTotal = (items = []) =>
+  items.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.priceAtTimeOfOrder || 0), 0);
 
 // @route   GET /api/orders
 // @desc    Get all orders (for admin)
@@ -98,6 +137,12 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: 'Order items are required' });
     }
 
+    const customerContact = normalizeCustomerContact(payload);
+    const customerContactError = validateCustomerContact(customerContact);
+    if (customerContactError) {
+      return res.status(400).json({ message: customerContactError });
+    }
+
     const menuItemIds = requestedItems.map((item) => item.menuItemId);
     const menuItems = await MenuItem.find({
       _id: { $in: menuItemIds },
@@ -109,22 +154,14 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: 'One or more menu items are invalid for this restaurant' });
     }
 
-    const normalizedItems = requestedItems.map((item) => {
-      const menuItem = menuItemMap.get(String(item.menuItemId));
-      return {
-        menuItemId: menuItem._id,
-        quantity: item.quantity,
-        priceAtTimeOfOrder: menuItem.price,
-      };
-    });
-
-    const totalPrice = normalizedItems.reduce(
-      (sum, item) => sum + item.quantity * item.priceAtTimeOfOrder,
-      0
-    );
+    const normalizedItems = buildNormalizedOrderItems({ requestedItems, menuItemMap });
+    const totalPrice = calculateOrderTotal(normalizedItems);
 
     payload.tableId = resolvedTableId;
     payload.restaurantId = restaurantId;
+    payload.customerName = customerContact.customerName;
+    payload.customerPhone = customerContact.customerPhone;
+    payload.customerEmail = customerContact.customerEmail;
     payload.items = normalizedItems;
     payload.totalPrice = totalPrice;
 
@@ -134,9 +171,9 @@ router.post('/', async (req, res) => {
 
     session.orders.push(order._id);
     session.cartItems = [];
-    if (payload.customerName) {
-      session.customerName = String(payload.customerName).trim();
-    }
+    session.customerName = customerContact.customerName;
+    session.customerPhone = customerContact.customerPhone;
+    session.customerEmail = customerContact.customerEmail;
     session.lastActivityAt = new Date();
     await session.save();
     const populatedSession = await TableSession.findById(session._id).populate('tableId');
@@ -181,6 +218,91 @@ router.put('/:id/status', auth, requireRole('RESTAURANT_ADMIN'), async (req, res
   } catch (err) {
     console.error(err.message);
     res.status(500).json({ message: 'Server Error' });
+  }
+});
+
+router.patch('/:id', auth, requireRole('RESTAURANT_ADMIN'), async (req, res) => {
+  try {
+    const order = await Order.findOne({
+      _id: req.params.id,
+      restaurantId: req.user.restaurantId,
+    });
+
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    const linkedBill = await Bill.findOne({
+      restaurantId: req.user.restaurantId,
+      orderIds: order._id,
+    }).select('_id');
+
+    if (linkedBill) {
+      return res.status(400).json({ message: 'This order is already linked to a bill and cannot be edited.' });
+    }
+
+    const customerContact = normalizeCustomerContact(req.body);
+    const customerContactError = validateCustomerContact(customerContact);
+    if (customerContactError) {
+      return res.status(400).json({ message: customerContactError });
+    }
+
+    const requestedItems = Array.isArray(req.body.items) ? req.body.items : [];
+    if (!requestedItems.length) {
+      return res.status(400).json({ message: 'Add at least one item to update the order.' });
+    }
+
+    const menuItemIds = requestedItems.map((item) => item.menuItemId);
+    const menuItems = await MenuItem.find({
+      _id: { $in: menuItemIds },
+      restaurantId: req.user.restaurantId,
+    });
+    const menuItemMap = new Map(menuItems.map((item) => [String(item._id), item]));
+
+    if (menuItemIds.some((itemId) => !menuItemMap.has(String(itemId)))) {
+      return res.status(400).json({ message: 'One or more selected menu items are invalid.' });
+    }
+
+    const normalizedItems = buildNormalizedOrderItems({ requestedItems, menuItemMap });
+
+    order.customerName = customerContact.customerName;
+    order.customerPhone = customerContact.customerPhone;
+    order.customerEmail = customerContact.customerEmail;
+    order.items = normalizedItems;
+    order.totalPrice = calculateOrderTotal(normalizedItems);
+    await order.save();
+
+    await TableSession.findOneAndUpdate(
+      {
+        restaurantId: req.user.restaurantId,
+        tableId: order.tableId,
+        isActive: true,
+        orders: order._id,
+      },
+      {
+        $set: {
+          customerName: customerContact.customerName,
+          customerPhone: customerContact.customerPhone,
+          customerEmail: customerContact.customerEmail,
+          lastActivityAt: new Date(),
+        },
+      }
+    );
+
+    const populatedOrder = await Order.findById(order._id)
+      .populate('tableId')
+      .populate('items.menuItemId');
+
+    const io = req.app.get('io');
+    io.emit('orderStatusUpdate', populatedOrder);
+
+    return res.json(populatedOrder);
+  } catch (err) {
+    console.error(err.message);
+    if (err.name === 'ValidationError' || err.name === 'CastError') {
+      return res.status(400).json({ message: 'Invalid order payload' });
+    }
+    return res.status(500).json({ message: 'Server Error' });
   }
 });
 
